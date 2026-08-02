@@ -5,7 +5,9 @@
 import struct
 
 GOZ_TAG_END = 0
-GOZ_TAG_POINT_LIST = 10000
+# 注意：GoZ_Binary.h 枚举里 BASE_ID_POINT=10000，POINT_LIST 是下一个值 = 10001
+# （C 枚举无显式值自动 +1；2026-08-02 用真实 ZBrush 导出文件核对确认）
+GOZ_TAG_POINT_LIST = 10001
 GOZ_FILE_HEADER = 32          # "GoZb" + 28 bytes text
 BLOCK_HEADER = struct.Struct("<IIIf")  # tag, size(含16字节头), iCount, modifier
 

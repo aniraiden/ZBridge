@@ -24,7 +24,7 @@ def build_goz(path, name, points, extra_blocks=None):
     for tag, icount, payload in (extra_blocks or []):
         out += block(tag, icount, payload)
     pts_b = struct.pack("<%df" % (len(points) * 3), *[c for p in points for c in p])
-    out += block(10000, len(points), pts_b)  # GoZ_TAG_POINT_LIST
+    out += block(10001, len(points), pts_b)  # GoZ_TAG_POINT_LIST（10000=BASE_ID，枚举自动 +1）
     out += block(0, 0, b"")  # GoZ_TAG_END_OF_FILE
     with open(path, "wb") as f:
         f.write(out)
@@ -123,6 +123,19 @@ def test_metrics_contaminated():
     m = gozlib.compute_metrics(cur, base, l0, l1, int1=0.5)
     assert m["A_pass"] is False, m
     assert m["D1_resid"] > 1e-3, m
+
+
+def test_read_real_zbrush_goz():
+    """可选回归：读真实 ZBrush 导出文件（存在时）。守卫 POINT_LIST tag=10001 等格式事实。
+    S1 probe1 之后 out/ 下必有 cur/base/L0/L1.goz；文件不存在则 SKIP。"""
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
+    p = os.path.join(d, "cur.goz")
+    if not os.path.exists(p):
+        print("SKIP test_read_real_zbrush_goz (out/cur.goz 不存在，先跑 probe1)")
+        return
+    n, pts = gozlib.read_goz_points(p)
+    assert n > 0, "真实 goz 应解析出顶点"
+    assert len(pts) == n
 
 
 def run_all():

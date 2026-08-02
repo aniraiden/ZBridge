@@ -104,13 +104,14 @@ def layer_recording(zbc):
 
 
 def layer_set_visible(zbc, want):
-    """可见性写：期望与当前不一致才 IClick(W-5,H/2) 切换一次；W/H 现读。"""
+    """可见性写：期望与当前不一致才 IClick(W-5,H/2) 切换一次；W/H 现读。
+    注：点击后立即 IModGet 读取可能滞后（S1 实测），勿用作状态门。"""
     path = layer_full_path(zbc)
     if layer_visible(zbc) != want:
         w = zbc.get_width(path)
         h = zbc.get_height(path)
         zbc.click(path, w - 5, h / 2)
-        log("LAYER", f"click_eye want={want} now={layer_visible(zbc)}")
+        log("LAYER", f"click_eye want={want}")
 
 
 def layer_record_import(zbc, goz_path):

@@ -3,3 +3,4 @@ debug.log
 __pycache__/
 *.pyc
 prototype_py/log/
+prototype_py/out/
