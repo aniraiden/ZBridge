@@ -13,16 +13,6 @@ _log_fh = None
 _log_name = ""
 
 
-def fresh():
-    """强制刷新 gozlib 与自身：ZBrush Python 解释器跨 Load 持久，`import` 只首次真执行，
-    不刷新会复用旧版模块（S1 曾导致 tag=10000 旧 gozlib 污染 probe2/3 指标）。
-    每个探测脚本 run() 开头必须调用一次。"""
-    import importlib
-    import gozlib
-    importlib.reload(gozlib)
-    importlib.reload(sys.modules[__name__])
-
-
 def log_init(tag="run"):
     """打开新日志文件 log/zb085_YYYYMMDD_HHMMSS_<tag>.log。返回绝对路径。"""
     global _log_fh, _log_name

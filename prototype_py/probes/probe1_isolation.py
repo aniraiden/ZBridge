@@ -8,6 +8,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 强制真重新导入：ZBrush 解释器跨 Load 缓存旧模块（reload 在嵌入环境有风险，用 pop+import）
+for _m in ("gozlib", "zbridge_085"):
+    sys.modules.pop(_m, None)
 import gozlib
 import zbridge_085 as zb
 from zbrush import commands as zbc
@@ -17,7 +20,6 @@ EXPECT_B_INT = 0.5
 
 
 def run():
-    zb.fresh()                      # 强制刷新模块（防 ZBrush 解释器缓存旧代码）
     zb.log_init("s1_isolation")
     os.makedirs(OUT_DIR, exist_ok=True)
     n = zb.layer_detect(zbc)

@@ -8,6 +8,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 强制真重新导入：ZBrush 解释器跨 Load 缓存旧模块（reload 在嵌入环境有风险，用 pop+import）
+for _m in ("gozlib", "zbridge_085"):
+    sys.modules.pop(_m, None)
 import gozlib
 import zbridge_085 as zb
 from zbrush import commands as zbc
@@ -16,7 +19,6 @@ OUT_DIR = r"h:/vibe_coding/ZBridge/prototype_py/out"   # 与 probe1 一致
 
 
 def run():
-    zb.fresh()                      # 强制刷新模块（防 ZBrush 解释器缓存旧代码）
     zb.log_init("s2_record_import")
     n0 = zb.layer_detect(zbc)
     zb.log("S2", f"before layers={n0}")
