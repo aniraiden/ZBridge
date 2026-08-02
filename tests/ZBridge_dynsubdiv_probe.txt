@@ -1,0 +1,171 @@
+//ZBridge - Dynamic Subdiv Probe
+//Purpose: Probe all potential Tool:Geometry:Dynamic Subdiv panel paths
+//Usage: Load in ZBrush via ZScript panel > Load button
+//Each button tests a different path. Run them one by one on a SubTool
+//with Dynamic Subdiv preview enabled to verify which paths are available.
+
+[VarDef,dpMsg,""]
+[VarDef,dpVal,0]
+[VarDef,dpMax,0]
+[VarDef,dpEnabled,0]
+[VarDef,dpName,""]
+[VarDef,dpCount,0]
+[VarDef,dpIdx,0]
+
+[ISubPalette,"ZPlugin:ZBridge_DynSub"]
+
+//Test 1: Check if Dynamic Subdiv panel exists
+[IButton,"ZPlugin:ZBridge_DynSub:1. IExists Panel",
+    "Check if Tool:Geometry:Dynamic Subdiv path exists.",
+    [VarSet,dpMsg,"[IExists,Tool:Geometry:Dynamic Subdiv]\n"]
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"SubTool: ",dpName,"\nResult: "]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpMsg,[StrMerge,dpMsg,"EXISTS"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"NOT FOUND"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,250]
+,,1]
+
+//Test 2: Read IGet value
+[IButton,"ZPlugin:ZBridge_DynSub:2. IGet Value",
+    "Try [IGet,Tool:Geometry:Dynamic Subdiv] - read current value.",
+    [VarSet,dpMsg,"[IGet,Tool:Geometry:Dynamic Subdiv]\n"]
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"SubTool: ",dpName,"\n"]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpVal,[IGet,Tool:Geometry:Dynamic Subdiv]]
+        [VarSet,dpMsg,[StrMerge,dpMsg,"IGet result: ",[Val,dpVal]]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"Panel not found - skip"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,250]
+,,1]
+
+//Test 3: Read IGetMax value
+[IButton,"ZPlugin:ZBridge_DynSub:3. IGetMax Value",
+    "Try [IGetMax,Tool:Geometry:Dynamic Subdiv] - read max range.",
+    [VarSet,dpMsg,"[IGetMax,Tool:Geometry:Dynamic Subdiv]\n"]
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"SubTool: ",dpName,"\n"]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpMax,[IGetMax,Tool:Geometry:Dynamic Subdiv]]
+        [VarSet,dpMsg,[StrMerge,dpMsg,"IGetMax result: ",[Val,dpMax]]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"Panel not found - skip"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,250]
+,,1]
+
+//Test 4: Check IsEnabled
+[IButton,"ZPlugin:ZBridge_DynSub:4. IsEnabled",
+    "Try [IsEnabled,Tool:Geometry:Dynamic Subdiv] - is it enabled?",
+    [VarSet,dpMsg,"[IsEnabled,Tool:Geometry:Dynamic Subdiv]\n"]
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"SubTool: ",dpName,"\n"]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [If,[IsEnabled,Tool:Geometry:Dynamic Subdiv],
+            [VarSet,dpMsg,[StrMerge,dpMsg,"ENABLED"]]
+        ,
+            [VarSet,dpMsg,[StrMerge,dpMsg,"DISABLED"]]
+        ]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"Panel not found - skip"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,250]
+,,1]
+
+//Test 5: Read and restore (ISet round-trip)
+[IButton,"ZPlugin:ZBridge_DynSub:5. ISet Round-Trip",
+    "Read value, ISet same value back - verify ISet works.",
+    [VarSet,dpMsg,"[ISet,Tool:Geometry:Dynamic Subdiv] round-trip\n"]
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"SubTool: ",dpName,"\n"]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpVal,[IGet,Tool:Geometry:Dynamic Subdiv]]
+        [VarSet,dpMsg,[StrMerge,dpMsg,"Original: ",[Val,dpVal],"\n"]]
+        [ISet,Tool:Geometry:Dynamic Subdiv,dpVal]
+        [VarSet,dpVal,[IGet,Tool:Geometry:Dynamic Subdiv]]
+        [VarSet,dpMsg,[StrMerge,dpMsg,"After ISet: ",[Val,dpVal],"\nRound-trip OK"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"Panel not found - skip"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,250]
+,,1]
+
+//Test 6: Iterate ALL SubTools - collect dynSubdiv values
+[IButton,"ZPlugin:ZBridge_DynSub:6. Scan All SubTools",
+    "Iterate all SubTools and read Dynamic Subdiv value for each.",
+    [VarSet,dpCount,[SubToolGetCount]]
+    [If,dpCount <= 0,
+    [NoteIButton,"Close"]
+    [Note,"No subtools loaded.",,1,4737096,,200]
+    [Exit]
+    ]
+    [VarSet,dpMsg,"Idx|Name|DynSub\n"]
+    [VarSet,dpIdx,0]
+    [Loop,dpCount,
+    [SubToolSelect,dpIdx]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpVal,0]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpVal,[IGet,Tool:Geometry:Dynamic Subdiv]]
+    ]
+    [VarSet,dpMsg,[StrMerge,dpMsg,[Val,dpIdx],"|",dpName,"|",[Val,dpVal],"\n"]]
+    [VarInc,dpIdx]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,500]
+,,1]
+
+//Test 7: Probe sub-paths under Dynamic Subdiv
+[IButton,"ZPlugin:ZBridge_DynSub:7. Probe Sub-Paths",
+    "Check if sub-controls exist under Tool:Geometry:Dynamic Subdiv.",
+    [SubToolSelect,[SubToolGetActiveIndex]]
+    [VarSet,dpName,[IGetTitle,Tool:Item Info]]
+    [VarSet,dpName,[StrExtract,dpName,0,[StrLength,dpName]-2]]
+    [VarSet,dpMsg,[StrMerge,"SubTool: ",dpName,"\n\nPath existence:\n"]]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"Tool:Geometry:Dynamic Subdiv = "]]
+    [If,[IExists,Tool:Geometry:Dynamic Subdiv],
+        [VarSet,dpMsg,[StrMerge,dpMsg,"YES"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"NO"]]
+    ]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"\nTool:Geometry:Dynamic Subdiv:Smt = "]]
+    [If,[IExists,"Tool:Geometry:Dynamic Subdiv:Smt"],
+        [VarSet,dpMsg,[StrMerge,dpMsg,"YES"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"NO"]]
+    ]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"\nTool:Geometry:Dynamic Subdiv:Smooth = "]]
+    [If,[IExists,"Tool:Geometry:Dynamic Subdiv:Smooth"],
+        [VarSet,dpMsg,[StrMerge,dpMsg,"YES"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"NO"]]
+    ]
+    [VarSet,dpMsg,[StrMerge,dpMsg,"\nTool:Geometry:Dynamic Subdiv:Apply = "]]
+    [If,[IExists,"Tool:Geometry:Dynamic Subdiv:Apply"],
+        [VarSet,dpMsg,[StrMerge,dpMsg,"YES"]]
+    ,
+        [VarSet,dpMsg,[StrMerge,dpMsg,"NO"]]
+    ]
+    [NoteIButton,"Close"]
+    [Note,dpMsg,,1,4737096,,300]
+,,1]

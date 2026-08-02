@@ -1,0 +1,191 @@
+//ZBridge Folder Test - step3: Dump + Setup + Compare
+[VarDef,testNoteText,""]
+[VarDef,testSTCount,0]
+[VarDef,testIdx,0]
+[VarDef,testStatus,0]
+[VarDef,testBit0,0]
+[VarDef,testBit1,0]
+[VarDef,testBit10,0]
+[VarDef,testBit11,0]
+[VarDef,testIsFolder,0]
+[VarDef,testSTName,""]
+[VarDef,testLineStr,""]
+[VarDef,testCurIdx,0]
+
+[RoutineDef,ZBTestDump,
+    [VarSet,testSTCount,[SubToolGetCount]]
+    [VarSet,testNoteText,[StrMerge,"SubTool States (",testSTCount," total)\n----------------------------------------------\n"]]
+    [VarSet,testIdx,0]
+    [Loop,testSTCount,
+        [SubToolSelect,testIdx]
+        [VarSet,testStatus,[SubToolGetStatus,testIdx]]
+        [VarSet,testBit0,0]
+        [If,(testStatus & 1) == 1,[VarSet,testBit0,1]]
+        [VarSet,testBit1,0]
+        [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+        [VarSet,testBit10,0]
+        [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+        [VarSet,testBit11,0]
+        [If,(testStatus & 2048) == 2048,[VarSet,testBit11,1]]
+        [VarSet,testIsFolder,0]
+        [If,testBit10 == 1,[VarSet,testIsFolder,1]]
+        [If,testBit11 == 1,[VarSet,testIsFolder,1]]
+        [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+        [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+        [VarSet,testLineStr,"  TOOL"]
+        [If,testIsFolder == 1,
+            [VarSet,testLineStr,"FOLDER"]
+        ]
+        [If,testBit0 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," b0=1"]]]
+        [If,testBit0 == 0,[VarSet,testLineStr,[StrMerge,testLineStr," b0=0"]]]
+        [If,testBit1 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," b1=VIS"]]]
+        [If,testBit1 == 0,[VarSet,testLineStr,[StrMerge,testLineStr," b1=HID"]]]
+        [If,testBit10 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," CLOSED"]]]
+        [If,testBit11 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," OPENED"]]]
+        [If,testIsFolder == 1,
+            [If,testBit10 == 0,
+                [If,testBit11 == 0,
+                    [VarSet,testLineStr,[StrMerge,testLineStr," OPEN"]]
+                ]
+            ]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,"  [",testIdx,"] ",testSTName,"\n    ",testLineStr,"\n"]]
+        [VarInc,testIdx]
+    ]
+    [Note,testNoteText,,1,4737096,,600]
+]
+
+[RoutineDef,ZBTestSetup,
+    [IPress,Tool:Sphere3D]
+    [IWait,2]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    //Step 1: Create FolderA at index 1
+    [SubToolSelect,1]
+    [IPress,Tool:SubTool:New Folder]
+    [IWait,1]
+    [SubToolSelect,2]
+    [IPress,Tool:SubTool:MoveUp]
+    [IWait,1]
+    [VarSet,testCurIdx,1]
+    [SubToolSelect,testCurIdx]
+    [VarSet,testStatus,[SubToolGetStatus,testCurIdx]]
+    [VarSet,testStatus,testStatus | 1]
+    [VarSet,testStatus,testStatus | 2]
+    [VarSet,testStatus,testStatus & 2147482623]
+    [SubToolSetStatus,testCurIdx,testStatus]
+    [IWait,1]
+    //Step 2: Create FolderB at index 2
+    [VarSet,testCurIdx,2]
+    [SubToolSelect,testCurIdx]
+    [IPress,Tool:SubTool:New Folder]
+    [IWait,1]
+    [VarSet,testCurIdx,3]
+    [SubToolSelect,testCurIdx]
+    [IPress,Tool:SubTool:MoveUp]
+    [IWait,1]
+    [VarSet,testCurIdx,2]
+    [SubToolSelect,testCurIdx]
+    [VarSet,testStatus,[SubToolGetStatus,testCurIdx]]
+    [VarSet,testStatus,testStatus | 1]
+    [VarSet,testStatus,testStatus & 2147483645]
+    [VarSet,testStatus,testStatus | 1024]
+    [SubToolSetStatus,testCurIdx,testStatus]
+    [IWait,1]
+    [SubToolSelect,0]
+    [Note,"Test scene created!\n\nFolders:\n  [1] FolderA: folEye=1 Open\n      + 1 child inside\n  [2] FolderB: folEye=0 Closed\n      + 1 child inside\n\nRun Compare to verify.",,1,4737096,,450]
+]
+
+[RoutineDef,ZBTestCompare,
+    [VarSet,testSTCount,[SubToolGetCount]]
+    [VarSet,testNoteText,"Folder Compare Results\n----------------------------------------------\n"]
+    //Check FolderA at index 1
+    [If,testSTCount > 1,
+        [SubToolSelect,1]
+        [VarSet,testStatus,[SubToolGetStatus,1]]
+        [VarSet,testBit1,0]
+        [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+        [VarSet,testBit10,0]
+        [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+        [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+        [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+        [VarSet,testLineStr,"  [1] "]
+        [VarSet,testLineStr,[StrMerge,testLineStr,testSTName]]
+        [VarSet,testLineStr,[StrMerge,testLineStr,": folEye=",testBit1," (exp 1) "]]
+        [If,testBit1 == 1,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"PASS"]]
+        ]
+        [If,testBit1 == 0,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"FAIL"]]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,testLineStr,"\n"]]
+        [VarSet,testLineStr,"       Closed="]
+        [If,testBit10 == 0,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"0 (exp 0) PASS"]]
+        ]
+        [If,testBit10 == 1,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"1 (exp 0) FAIL"]]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,testLineStr,"\n"]]
+    ]
+    //Check FolderB at index 2
+    [If,testSTCount > 2,
+        [SubToolSelect,2]
+        [VarSet,testStatus,[SubToolGetStatus,2]]
+        [VarSet,testBit1,0]
+        [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+        [VarSet,testBit10,0]
+        [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+        [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+        [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+        [VarSet,testLineStr,"  [2] "]
+        [VarSet,testLineStr,[StrMerge,testLineStr,testSTName]]
+        [VarSet,testLineStr,[StrMerge,testLineStr,": folEye=",testBit1," (exp 0) "]]
+        [If,testBit1 == 0,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"PASS"]]
+        ]
+        [If,testBit1 == 1,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"FAIL"]]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,testLineStr,"\n"]]
+        [VarSet,testLineStr,"       Closed="]
+        [If,testBit10 == 1,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"1 (exp 1) PASS"]]
+        ]
+        [If,testBit10 == 0,
+            [VarSet,testLineStr,[StrMerge,testLineStr,"0 (exp 1) FAIL"]]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,testLineStr,"\n"]]
+    ]
+    [Note,testNoteText,,1,4737096,,500]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Setup Test Scene",
+    "Create test tool with [1]FolderA folEye=1 Open and [2]FolderB folEye=0 Closed",
+    [RoutineCall,ZBTestSetup]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Dump SubTool States",
+    "Read all subtools and display bit states",
+    [RoutineCall,ZBTestDump]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Compare with Expected",
+    "Compare actual folder states against expected values",
+    [RoutineCall,ZBTestCompare]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Run All Tests",
+    "Setup scene, dump states, then compare",
+    [RoutineCall,ZBTestSetup]
+    [RoutineCall,ZBTestDump]
+    [RoutineCall,ZBTestCompare]
+,,1]

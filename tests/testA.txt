@@ -1,0 +1,17 @@
+﻿//ZBridge Test A - UI Only (no RoutineDef)
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbNoteText,""]
+[VarDef,zbPlatformStr,"Windows"]
+
+[ISubPalette,"ZPlugin:ZBridgeA"]
+
+[IButton,"ZPlugin:ZBridgeA:About",
+    "About ZBridge Test A",
+    [VarSet,ZVers,[ZBrushInfo,0]]
+    [VarSet,isMac,[ZBrushInfo,6]]
+    [If,isMac,[VarSet,zbPlatformStr,"Mac"]]
+    [VarSet,zbNoteText,[StrMerge,"ZBrush: ",ZVers,"\nPlatform: ",zbPlatformStr]]
+    [NoteIButton,"Close"]
+    [Note,zbNoteText,,1,4737096,,200]
+,,1]

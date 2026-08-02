@@ -1,0 +1,9 @@
+//ZBridge Folder Test - step2g: only IWait button, no Dump
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Test IWait Only",
+    "Only test IWait",
+    [Note,"Before IWait",,1,4737096,,200]
+    [IWait,1]
+    [Note,"IWait worked",,1,4737096,,200]
+,,1]

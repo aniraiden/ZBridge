@@ -1,0 +1,186 @@
+﻿//ZLayer_probe - ZBridge 0.8.0 雕刻图层探测脚本
+//用途: 一次运行验证 P0a/P0b/P1/P2/P3（doc/design_next.md §4.8.5）
+//准备: 当前 Tool 的活动子工具含 2 个已命名且有明显形变的图层
+//      （如 LayerA/LayerB，LayerB 强度 0.5），图层已展开可见
+//加载: ZScript 面板 > Load；运行: ZPlugin:ZBridge_Test > Layer Probe
+//流程: Section B 路径探测 -> Section C 基准+快照导出 -> Section A P0 录制导入
+[VarDef,zbMsg,""]
+[VarDef,zbCount,0]
+[VarDef,zbI,0]
+[VarDef,zbStart,""]
+[VarDef,zbPath,""]
+[VarDef,zbCur,""]
+[VarDef,zbInfo,""]
+[VarDef,zbSavePath,""]
+[VarDef,zbDir,""]
+[VarDef,zbInt,0]
+[VarDef,zbIntPath,"Tool:Layers:Intensity"]
+
+//回到图层栈顶部: SelectUp 直到标题不再变化
+[RoutineDef,ZBProbeGotoTop,
+[Loop,64,
+[VarSet,zbStart,""]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[VarSet,zbStart,zbPath]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbCur,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[StrLength,zbPath] == [StrLength,zbCur],
+[If,[StrFind,zbPath,zbCur] == 0,
+[LoopExit]
+]
+]
+]
+]
+
+//全部图层强度归零（自顶向下，SelectDown 连续相等则到底退出）
+[RoutineDef,ZBProbeZeroAll,
+[RoutineCall,ZBProbeGotoTop]
+[Loop,64,
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[IExists,zbIntPath],
+[ISet,zbIntPath,0]
+]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[StrLength,zbPath] == [StrLength,zbCur],
+[If,[StrFind,zbPath,zbCur] == 0,
+[LoopExit]
+]
+]
+]
+]
+
+//计数法1: 连续相等（自顶向下，到底退出）
+[RoutineDef,ZBProbeCountEnd,
+[RoutineCall,ZBProbeGotoTop]
+[VarSet,zbCount,0]
+[Loop,64,
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[StrLength,zbPath] == [StrLength,zbCur],
+[If,[StrFind,zbPath,zbCur] == 0,
+[LoopExit]
+]
+]
+[VarInc,zbCount]
+]
+]
+
+//计数法2: 回到起点（SelectDown 环绕检测）
+[RoutineDef,ZBProbeCountWrap,
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[VarSet,zbStart,zbPath]
+[VarSet,zbCount,0]
+[VarSet,zbI,0]
+[Loop,64,
+[VarInc,zbI]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[StrLength,zbPath] == [StrLength,zbStart],
+[If,[StrFind,zbPath,zbStart] == 0,
+[VarSet,zbCount,zbI]
+[LoopExit]
+]
+]
+]
+]
+
+[RoutineDef,ZLayerProbeRun,
+//======== Section B: 路径探测 (P1/P2) ========
+[VarSet,zbIntPath,"Tool:Layers:Intensity"]
+[If,[IExists,Tool:Layers:Intensity],
+,
+[VarSet,zbIntPath,"Tool:Layers:Layer Intensity"]
+]
+[VarSet,zbMsg,"=== Section B: 路径存在性探测 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IExists: ",[IExists,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IEnabled: ",[IsEnabled,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Layer Intensity IExists: ",[IExists,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"New IExists: ",[IExists,Tool:Layers:New],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown IExists: ",[IExists,Tool:Layers:SelectDown],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectUp IExists: ",[IExists,Tool:Layers:SelectUp],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Rename IExists: ",[IExists,Tool:Layers:Rename],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Scrollbar IExists: ",[IExists,Tool:Layers:Layers Scrollbar],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 0 IExists: ",[IExists,Tool:Layers:3D Layer 0],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+[VarSet,zbMsg,"=== 滚动条/标题/导航 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Scrollbar IGetMax: ",[IGetMax,Tool:Layers:Layers Scrollbar],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Scrollbar IGet: ",[IGet,Tool:Layers:Layers Scrollbar],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Import MDD IExists: ",[IExists,Tool:Layers:Import MDD],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"RecordDeform IExists: ",[IExists,Tool:Layers:Record Deformation Animation],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前层标题: ",[IGetTitle,zbIntPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x1: ",[IGetTitle,zbIntPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x2: ",[IGetTitle,zbIntPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x3: ",[IGetTitle,zbIntPath],"\n"]]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectUp x3 后: ",[IGetTitle,zbIntPath],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Section C: 基准+快照导出 (P3) ========
+[NoteIButton,"OK"]
+[Note,"Section C: 基准+快照导出\n\n脚本将: 全部图层强度归零 -> 导出 probe_Base.goz\n逐层(仅该层强度1) -> 导出 probe_Layer_0/1.goz\n\n请选择导出目录(选 probe_Base.goz 保存位置即可)。",,,4737096,,400]
+[VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","probe_Base.goz","选择导出目录"]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[VarSet,zbDir,[FileNameExtract,zbSavePath,1]]
+[RoutineCall,ZBProbeZeroAll]
+[FileNameSetNext,zbSavePath]
+[IPress,Tool:Export]
+[RoutineCall,ZBProbeGotoTop]
+//逐层快照（测试工具固定 2 层）
+[VarSet,zbI,0]
+[Loop,2,
+[ISet,zbIntPath,1]
+[FileNameSetNext,[StrMerge,zbDir,"probe_Layer_",zbI,".goz"]]
+[IPress,Tool:Export]
+[ISet,zbIntPath,0]
+[IPress,Tool:Layers:SelectDown]
+[VarInc,zbI]
+]
+[NoteIButton,"Close"]
+[Note,"Section C 完成。请核对:\n1) probe_Base/Layer_0/Layer_1 已生成\n2) Base 为未变形基准网格\n3) 各快照只含对应图层形变\n4) 图层强度已被脚本归零(请稍后手动恢复 LayerB=0.5)",,,4737096,,400]
+//======== Section A: P0 录制导入生死验证 ========
+[NoteIButton,"OK"]
+[Note,"Section A: P0 录制导入测试\n\n脚本将: 全层强度归零 -> 新建图层(录制) -> 导入 probe_Layer_0.goz -> 强度归零退出录制\n\n注意: 该操作会改动当前子工具(新增图层/替换网格),建议在测试工具上运行。",,,4737096,,500]
+//计数 before
+[RoutineCall,ZBProbeCountWrap]
+[VarSet,zbMsg,"=== Section A: P0 结果 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"before: 环绕计数=",zbCount," "]]
+[RoutineCall,ZBProbeCountEnd]
+[VarSet,zbMsg,[StrMerge,zbMsg,"连续相等计数=",zbCount,"\n"]]
+[RoutineCall,ZBProbeZeroAll]
+[RoutineCall,ZBProbeGotoTop]
+[IPress,Tool:Layers:New]
+[FileNameSetNext,[StrMerge,zbDir,"probe_Layer_0.goz"]]
+[IPress,Tool:Import]
+[VarSet,zbInt,[IGet,zbIntPath]]
+[ISet,zbIntPath,0]
+[VarSet,zbMsg,[StrMerge,zbMsg,"导入后当前层标题: ",[IGetTitle,zbIntPath],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"导入时强度: ",[Val,zbInt],"\n"]]
+[VarSet,zbInfo,""]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,zbIntPath]]]
+[If,[IExists,zbPath],
+[VarSet,zbInfo,[IGetInfo,zbPath]]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"新层信息: ",zbInfo,"\n"]]
+//计数 after
+[RoutineCall,ZBProbeCountWrap]
+[VarSet,zbMsg,[StrMerge,zbMsg,"after: 环绕计数=",zbCount," "]]
+[RoutineCall,ZBProbeCountEnd]
+[VarSet,zbMsg,[StrMerge,zbMsg,"连续相等计数=",zbCount,"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"\n请肉眼确认:\nA) 新图层是否有形变(强度 0<->1 切换时网格变化)?\nB) LayerA/LayerB 是否仍在图层栈中?\nC) 全层强度归零后网格是否回到未变形基准?\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe",
+    "ZBridge 0.8.0 layer probe: P0 recording-import + path detection + base/snapshot export.",
+    [RoutineCall,ZLayerProbeRun]
+,,1]

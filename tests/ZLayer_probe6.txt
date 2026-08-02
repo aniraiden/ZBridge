@@ -1,0 +1,699 @@
+﻿//ZLayer_probe6 - ZBridge 0.8.0 图层定位/导出验证探针 (复刻主程序 ZBRunLayerDetect/ZBRunLayerToTop)
+//按钮:
+//  Go to Top  = SelectUp x 层数 饱和到栈顶
+//  Prev       = SelectUp 上一层
+//  Next       = SelectDown 下一层
+//  Export Cur = 其余层全关+本层置1 -> 手动选路径 -> Tool:Export (复刻主程序快照逻辑)
+//  Import     = 导入测试 (不变)
+//核心安全: 完全零接触 Layers Scrollbar, 只靠 SelectUp/Down 导航 + 层名变化计数 (上限512)
+//用法:
+//  [Export] 加载单子工具2层场景(两层层名/形变明显不同) -> 点按钮
+//  [Import] 重启ZBrush(干净SimpleBrush)后 -> 点按钮
+//输出: C:/Users/Administrator/Desktop/test22_probe6/probe6_*.txt (与 goz 同目录)
+[VarDef,zbMsg,""]
+[VarDef,zbLogMem,"ZP6LogMem"]
+[VarDef,zbLogOff,0]
+[VarDef,zbLogBytes,0]
+[VarDef,zbRefMem,"ZP6RefMem"]
+[VarDef,zbRefOff,0]
+[VarDef,zbRestOff,0]
+[VarDef,zbDir,"C:/Users/Administrator/Desktop/test22_probe6/"]
+[VarDef,zbLogFile,"probe6_export_log.txt"]
+[VarDef,zbCount,0]
+[VarDef,zbStName,""]
+[VarDef,zbPath,""]
+[VarDef,zbName,""]
+[VarDef,zbName2,""]
+[VarDef,zbInt,""]
+[VarDef,zbMod,0]
+[VarDef,zbVis,0]
+[VarDef,zbVisCur,0]
+[VarDef,zbW,0]
+[VarDef,zbH,0]
+[VarDef,zbI,0]
+[VarDef,zbJ,0]
+[VarDef,zbMaxS,0]
+[VarDef,zbCurS,0]
+[VarDef,zbRec,""]
+[VarDef,zbP1,0]
+[VarDef,zbP2,0]
+[VarDef,zbP3,0]
+[VarDef,zbP4,0]
+[VarDef,zbP5,0]
+[VarDef,zbRecBit,0]
+[VarDef,zbLi,0]
+[VarDef,zbGozPath,""]
+[VarDef,zbBefore,0]
+[VarDef,zbAfter,0]
+[VarDef,zbVal,0]
+[VarDef,zbSavePath,""]
+[VarDef,zbIntMem,"ZP6IntMem"]
+[VarDef,zbIntOff,0]
+[VarDef,zbIntRestOff,0]
+[VarDef,zbIntBytes,0]
+[VarDef,zbIdx,0]
+[VarDef,zbFound,0]
+[VarDef,zbSteps,0]
+[VarDef,zbTmp,""]
+[VarDef,zbName3,""]
+[VarDef,zbTarget,""]
+[VarDef,zbWant,0]
+[VarDef,zbI2,0]
+[VarDef,zbNameUser,""]
+[VarDef,zbNameA,""]
+[VarDef,zbNameB,""]
+[VarDef,zbSame,0]
+[VarDef,zbAfterN,""]
+[VarDef,zbLogPath,""]
+
+//~~~字符串判等: ZScript [If] 的 ==/!= 对字符串不可靠(非数字串被强转0, 任意两名字恒"相等"),
+//~~~必须用 StrLength+StrFind 双向判等 (ZBrushCentral Marcus Civis 官方结论)。
+//~~~调用前设 zbNameA/zbNameB; 调用后 zbSame=1(相等) 或 0(不等)
+[RoutineDef,ZP6Same,
+[VarSet,zbSame,0]
+[If,[StrLength,zbNameA] == [StrLength,zbNameB],
+[If,[StrFind,zbNameA,zbNameB] == 0,
+[If,[StrFind,zbNameB,zbNameA] == 0,
+[VarSet,zbSame,1]
+]
+]
+]
+]
+
+//~~~层数检测 (零轮询! probe1 认证模式: SelectUp 饱和到顶 -> SelectDown 逐层走, 层名不变=栈底)~~~
+//完全零接触 Layers Scrollbar (连读都不读), 计数后停在栈顶
+//主程序 ZBRunLayerDetect/ToTop 均为零轮询; probe6 旧版每步 30x0.05s 轮询 = 卡死最大嫌疑(2026-08-02)
+[RoutineDef,ZP6Detect,
+[VarSet,zbCount,0]
+[If,[IExists,Tool:Layers:Layer Intensity],
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+//1. 逐层向上直到饱和(标题不再变化=栈顶), 零轮询
+[VarSet,zbI,0]
+[Loop,512,
+[VarSet,zbName2,[IGetTitle,Tool:Layers:Layer Intensity]]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbName3,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbNameA,zbName3]
+[VarSet,zbNameB,zbName2]
+[RoutineCall,ZP6Same]
+[If,zbSame == 1,[LoopExit]]
+[VarInc,zbI]
+]
+//2. 从栈顶逐层向下计数: 标题变化则计数, 不变=栈底, 零轮询
+[VarSet,zbCount,1]
+[VarSet,zbName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbI,0]
+[Loop,512,
+[VarSet,zbName2,[IGetTitle,Tool:Layers:Layer Intensity]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbName3,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbNameA,zbName3]
+[VarSet,zbNameB,zbName2]
+[RoutineCall,ZP6Same]
+[If,zbSame == 1,[LoopExit]]
+[VarInc,zbCount]
+[VarSet,zbName,zbName3]
+[VarInc,zbI]
+]
+//3. 回到栈顶 (SelectUp x 层数-1 必到顶)
+[VarSet,zbI,0]
+[Loop,zbCount-1,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+]
+]
+]
+
+//~~~日志写内存块 + 实时落盘(每行立即写入文件, 卡死/中断也能看到完整进度)~~~
+[RoutineDef,ZP6Log,
+[VarSet,zbLogBytes,[MemWriteString,zbLogMem,zbMsg,zbLogOff]]
+[VarSet,zbLogOff,zbLogOff + zbLogBytes]
+[RoutineCall,ZP6SaveLog]
+]
+
+//~~~日志实时落盘(卡死也能看到最后一步; 独立 zbLogPath, 不污染 zbGozPath)~~~
+[RoutineDef,ZP6SaveLog,
+[VarSet,zbLogPath,[StrMerge,zbDir,zbLogFile]]
+[MemResize,zbLogMem,zbLogOff+2048]
+[MemSaveToFile,zbLogMem,zbLogPath]
+]
+
+//~~~轮询等待: 层切换完成 (zbTarget 非空=等到该层名; 空=等到标题变化)~~~
+//上限 50 次 x 0.1s = 5s, 防止死循环
+[RoutineDef,ZP6WaitNav,
+[VarSet,zbI2,0]
+[Loop,50,
+[VarSet,zbNameA,[IGetTitle,Tool:Layers:Layer Intensity]]
+[If,[StrLength,zbTarget] > 0,
+[VarSet,zbNameB,zbTarget]
+,
+[VarSet,zbNameB,zbTmp]
+]
+[RoutineCall,ZP6Same]
+[If,[StrLength,zbTarget] > 0,
+[If,zbSame == 1,[LoopExit]]
+,
+[If,zbSame == 0,[LoopExit]]
+]
+[Delay,0.1]
+[VarInc,zbI2]
+]
+]
+
+//~~~轮询等待: 强度应用完成 (直到 Layer Intensity 读回值 == zbWant)~~~
+[RoutineDef,ZP6WaitInt,
+[VarSet,zbI2,0]
+[Loop,50,
+[If,[Val,[IGet,Tool:Layers:Layer Intensity]] == zbWant,[LoopExit]]
+[Delay,0.1]
+[VarInc,zbI2]
+]
+]
+
+//~~~轮询等待: 标题稳定 (连续两次读取相同, 用于导航后确认切换完成)~~~
+[RoutineDef,ZP6WaitStable,
+[VarSet,zbI2,0]
+[Loop,50,
+[VarSet,zbTmp,[IGetTitle,Tool:Layers:Layer Intensity]]
+[Delay,0.1]
+[VarSet,zbNameA,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbNameB,zbTmp]
+[RoutineCall,ZP6Same]
+[If,zbSame == 1,[LoopExit]]
+[VarInc,zbI2]
+]
+]
+
+//~~~快照 Pass (p6a=0 无Delay复刻主程序; p6a=1 ISet后Delay300)~~~
+[RoutineDef,ZP6SnapPass,
+//先归零(栈顶->栈底, 结束时停在栈底=layerIndex0) -> 与 E2 后状态一致
+[RoutineCall,ZP6GoTop]
+[VarSet,zbJ,0]
+[Loop,zbCount,
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbJ < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbJ]
+]
+[VarSet,zbJ,0]
+[Loop,zbCount,
+[VarSet,zbName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"S",[Val,zbJ]," 当前层: '",zbName,"'\n"]]
+[RoutineCall,ZP6Log]
+[ISet,Tool:Layers:Layer Intensity,1]
+[If,p6a == 1,
+[Delay,0.3]
+]
+[VarSet,zbName2,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"S",[Val,zbJ]," 置1后当前层: '",zbName2,"'\n"]]
+[RoutineCall,ZP6Log]
+[If,p6a == 0,
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_Layer",[Val,zbJ],"a.goz"]]
+,
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_Layer",[Val,zbJ],"b.goz"]]
+]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Export]
+[Delay,0.4]
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbJ < zbCount-1,
+[IPress,Tool:Layers:SelectUp]
+[Delay,0.15]
+[VarSet,zbName2,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"S",[Val,zbJ]," SelectUp后: 层'",zbName2,"' (应切换层名)\n"]]
+[RoutineCall,ZP6Log]
+]
+[VarInc,zbJ]
+]
+,p6a]
+
+//~~~恢复原强度+可见性 (从 refMem, 栈顶->栈底)~~~
+[RoutineDef,ZP6Restore,
+[RoutineCall,ZP6GoTop]
+[VarSet,zbJ,0]
+[VarSet,zbRestOff,0]
+[Loop,zbCount,
+[VarSet,zbRec,""]
+[MemReadString,zbRefMem,zbRec,zbRestOff]
+[VarSet,zbLogBytes,[StrLength,zbRec]]
+[VarSet,zbRestOff,zbRestOff + zbLogBytes + 1]
+[VarSet,zbP1,[StrFind,"|",zbRec,0]]
+[VarSet,zbP2,[StrFind,"|",zbRec,zbP1+1]]
+[VarSet,zbP3,[StrFind,"|",zbRec,zbP2+1]]
+[VarSet,zbP4,[StrFind,"|",zbRec,zbP3+1]]
+[VarSet,zbP5,[StrFind,"|",zbRec,zbP4+1]]
+[VarSet,zbName,[StrExtract,zbRec,zbP2+1,zbP3-1]]
+[VarSet,zbInt,[StrExtract,zbRec,zbP3+1,zbP4-1]]
+[VarSet,zbVal,[Val,[StrExtract,zbRec,zbP4+1,zbP5-1]]]
+[ISet,Tool:Layers:Layer Intensity,zbInt]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbVisCur,0]
+[If,(zbMod & 2) == 2,
+[VarSet,zbVisCur,1]
+]
+[If,zbVal == 1,
+[If,zbVisCur == 0,
+[If,zbW > 10,
+[IClick,zbPath,zbW-5,zbH/2]
+[Delay,0.15]
+]
+]
+]
+[VarSet,zbMsg,[StrMerge,"R 位置",[Val,zbJ]," '",zbName,"' int=",zbInt," vis=",[Val,zbVal],"\n"]]
+[RoutineCall,ZP6Log]
+[If,zbJ < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbJ]
+]
+]
+
+//~~~导航: 回到栈顶 (复刻 ZBRunLayerToTop: SelectUp x 层数 饱和到顶)~~~
+[RoutineDef,ZP6GoTop,
+[VarSet,zbMsg,"NAV: GoTop called\n"]
+[RoutineCall,ZP6Log]
+[RoutineCall,ZP6Detect]
+[If,zbCount < 1,
+[Note,"没有图层",,,4737096,,300]
+]
+[If,zbCount < 1,[Exit]]
+[VarSet,zbName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"栈顶: '",zbName,"'\n共 ",[Val,zbCount]," 层"]]
+[Note,zbMsg,,,4737096,,300]
+]
+//~~~导航: 下一层 (SelectDown, 不碰滚动条, 不重复计数)~~~
+[RoutineDef,ZP6GoNext,
+[VarSet,zbMsg,"NAV: GoNext called\n"]
+[RoutineCall,ZP6Log]
+[IPress,Tool:Layers:SelectDown]
+[Delay,0.1]
+[VarSet,zbName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"下一层: '",zbName,"'\n共 ",[Val,zbCount]," 层"]]
+[Note,zbMsg,,,4737096,,200]
+]
+//~~~导航: 上一层 (SelectUp, 不碰滚动条, 不重复计数)~~~
+[RoutineDef,ZP6GoPrev,
+[VarSet,zbMsg,"NAV: GoPrev called\n"]
+[RoutineCall,ZP6Log]
+[IPress,Tool:Layers:SelectUp]
+[Delay,0.1]
+[VarSet,zbName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,"上一层: '",zbName,"'\n共 ",[Val,zbCount]," 层"]]
+[Note,zbMsg,,,4737096,,200]
+]
+//~~~导出当前选中层 (其余层全关, 本层置1, 导出纯目标层形变 goz)~~~
+//复刻主程序已验证路径 (ZBRunLayerDetect 滚动条计数 + ToTop + BuildMem 记录 + DoExport 归零/导出 + RestoreMem 恢复):
+//  - 层数 = 滚动条 IGetSecondary (主程序同款, 被动读取零导航; 无层时 Layer Intensity 禁用则整体跳过)
+//  - FileNameAsk 仅一次置于最前 (主程序同序; 用户选位置), 之后全程 UI 自动化不再出现任何模态框/文件名对话框
+//  - 导航/状态改变全用 SelectUp/Down + 滑杆 ISet(Layer Intensity), 单语句 If, 零轮询 (主程序验证模式)
+//  - 日志仅写里程碑(循环外), 删除旧版逐行写盘/自定义 Detect 导航 (2026-08-02 挂起根因候选)
+[RoutineDef,ZP6ExportCur,
+//0. 保存当前层名 (任何导航前; 重名免疫匹配用, ZP6Same 双向判等)
+[VarSet,zbNameUser,[IGetTitle,Tool:Layers:Layer Intensity]]
+//1. 层数: 滚动条官方计数 (主程序 ZBRunLayerDetect 同款; 不移动选择, 无层时 Layer Intensity 禁用)
+[VarSet,zbCount,0]
+[If,[IExists,Tool:Layers:Layer Intensity],
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[If,[IExists,Tool:Layers:Layers Scrollbar],
+[ISet,Tool:Layers:Layers Scrollbar,0,255]
+[VarSet,zbCount,[IGetSecondary,Tool:Layers:Layers Scrollbar]]
+[VarInc,zbCount]
+[If,zbCount < 1,
+[VarSet,zbCount,0]
+]
+]
+]
+]
+[If,zbCount < 1,
+[Note,"没有图层",,,4737096,,300]
+]
+[If,zbCount < 1,[Exit]]
+//2. 用户选导出位置 (仅此一次模态框; 取消则退出, 未做任何改动)
+[VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","probe6_Layer_cur.goz","Export current layer - Choose location..."]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[Delay,0.2]
+[VarSet,zbDir,[FileNameExtract,zbSavePath,1]]
+//正斜杠拼接 (FileNameSetNext 硬约束: 反斜杠路径导致导出异常缩放, 主程序 ZBRunExport 同款)
+[VarSet,zbGozPath,[StrMerge,zbDir,"/probe6_Layer_cur.goz"]]
+//2b. 日志新建 (此后全部写用户所选目录; 里程碑式, 循环外)
+[MemDelete,zbLogMem]
+[MemCreate,zbLogMem,32768]
+[VarSet,zbLogOff,0]
+[VarSet,zbLogFile,"probe6_export_log.txt"]
+[VarSet,zbMsg,[StrMerge,"=== P6 EXPORT-CUR v3 === count=",[Val,zbCount]," user='",zbNameUser,"' dir=",zbDir]]
+[RoutineCall,ZP6Log]
+//3. 内存块 (记录 int|vis, 恢复用)
+[MemDelete,zbIntMem]
+[MemCreate,zbIntMem,16384]
+[VarSet,zbIntOff,0]
+[VarSet,zbIntRestOff,0]
+//4. 到栈顶 (主程序 ZBRunLayerToTop 同款: SelectUp x 层数 饱和到顶, 重名免疫计数法)
+[VarSet,zbI,0]
+[Loop,zbCount,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+[VarSet,zbMsg,"TOPPED-OK"]
+[RoutineCall,ZP6Log]
+//5. 栈顶->栈底: 逐层 记录 int|vis + 匹配目标层位置 + 滑杆归零 + SelectDown (主程序 BuildMem/DoExport 同款)
+[VarSet,zbIdx,-1]
+[VarSet,zbI,0]
+[Loop,zbCount,
+[VarSet,zbName2,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbNameA,zbName2]
+[VarSet,zbNameB,zbNameUser]
+[RoutineCall,ZP6Same]
+[If,zbSame == 1,
+[VarSet,zbIdx,zbI]
+]
+[VarSet,zbPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbVis,0]
+[If,(zbMod & 2) == 2,
+[VarSet,zbVis,1]
+]
+[VarSet,zbInt,[IGet,Tool:Layers:Layer Intensity]]
+[VarSet,zbRec,[StrMerge,zbInt,"|",[Val,zbVis]]]
+[VarSet,zbIntBytes,[MemWriteString,zbIntMem,zbRec,zbIntOff]]
+[VarSet,zbIntOff,zbIntOff + zbIntBytes]
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbI < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbI]
+]
+[VarSet,zbMsg,[StrMerge,"zero-done idx=",[Val,zbIdx]," "]]
+[RoutineCall,ZP6Log]
+[If,zbIdx < 0,
+[Note,"未定位到当前层(重名?)",,,4737096,,300]
+]
+[If,zbIdx < 0,[Exit]]
+//6. 从栈底 SelectUp (zbCount-1-zbIdx) 次 回到目标层 (主程序导航法, 零轮询)
+[VarSet,zbSteps,zbCount-1-zbIdx]
+[VarSet,zbI,0]
+[Loop,zbSteps,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+//7. 开眼(可见关阻断形变) + 滑杆置强度1 -> 导出 (主程序 DoExport 同款)
+[VarSet,zbPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbVisCur,0]
+[If,(zbMod & 2) == 2,
+[VarSet,zbVisCur,1]
+]
+[If,zbVisCur == 0,
+[If,zbW > 10,
+[IClick,zbPath,zbW-5,zbH/2]
+]
+]
+[ISet,Tool:Layers:Layer Intensity,1]
+[VarSet,zbMsg,[StrMerge,"before-export cur='",[IGetTitle,Tool:Layers:Layer Intensity],"' "]]
+[RoutineCall,ZP6Log]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Export]
+[VarSet,zbMsg,"export-pressed "]
+[RoutineCall,ZP6Log]
+//8. 恢复原强度+可见性 (主程序 RestoreMem 同款: 先强度后可见性, 对称恢复; 记录="int|vis")
+[VarSet,zbI,0]
+[Loop,zbCount,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+[VarSet,zbI,0]
+[Loop,zbCount,
+[VarSet,zbTmp,""]
+[MemReadString,zbIntMem,zbTmp,zbIntRestOff]
+[If,[StrLength,zbTmp] <= 0,
+[LoopExit]
+]
+[VarSet,zbIntBytes,[StrLength,zbTmp]]
+[VarSet,zbIntRestOff,zbIntRestOff + zbIntBytes + 1]
+[VarSet,zbP1,[StrFind,"|",zbTmp,0]]
+[VarSet,zbInt,[StrExtract,zbTmp,0,zbP1-1]]
+[VarSet,zbVal,[Val,[StrExtract,zbTmp,zbP1+1,[StrLength,zbTmp]-1]]]
+[ISet,Tool:Layers:Layer Intensity,zbInt]
+[VarSet,zbPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbVisCur,0]
+[If,(zbMod & 2) == 2,
+[VarSet,zbVisCur,1]
+]
+[If,zbVal == 1,
+[If,zbVisCur == 0,
+[If,zbW > 10,
+[IClick,zbPath,zbW-5,zbH/2]
+]
+]
+]
+[If,zbVal == 0,
+[If,zbVisCur == 1,
+[If,zbW > 10,
+[IClick,zbPath,zbW-5,zbH/2]
+]
+]
+]
+[If,zbI < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbI]
+]
+[MemDelete,zbIntMem]
+[MemResize,zbLogMem,zbLogOff]
+[RoutineCall,ZP6SaveLog]
+[MemDelete,zbLogMem]
+[VarSet,zbMsg,[StrMerge,"EXPORTED '",zbNameUser,"' 已导出 -> ",zbGozPath]]
+[Note,zbMsg,,,4737096,,400]
+]
+
+//~~~IMPORT 主流程 (重启后干净SimpleBrush下运行)~~~
+[RoutineDef,ZP6Imp,
+[VarSet,zbLogFile,"probe6_import_log.txt"]
+[NoteIButton,"OK"]
+[Note,"Layer Probe6 Import\n\n将执行(替换当前工具):\n 1) 导入 probe6_LayerBase.goz (基准)\n 2) 最高SDiv 逐层 New+录制导入 Layer0/Layer1\n 3) 恢复强度/可见性\n\n前提: 重启后干净 SimpleBrush\n若弹替换确认框 点 OK/Replace/Yes\n不要点 Cancel\n\n数据写入 probe6_import_log.txt",,,4737096,,800]
+[MemDelete,zbLogMem]
+[MemCreate,zbLogMem,32768]
+[VarSet,zbLogOff,0]
+[VarSet,zbMsg,"=== ZP6 IMPORT ===\n"]
+[RoutineCall,ZP6Log]
+//加载 layers.txt 到 refMem (恢复强度/可见性用)
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_layers.txt"]]
+[If,[FileExists,zbGozPath],
+[MemDelete,zbRefMem]
+[MemCreateFromFile,zbRefMem,zbGozPath]
+,
+[NoteIButton,"OK"]
+[Note,[StrMerge,"未找到: ",zbGozPath,"\n请先运行 Export 按钮"],,,4737096,,300]
+[Exit]
+]
+//--- I1 导入 Base ---
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_LayerBase.goz"]]
+[If,[FileExists,zbGozPath],
+,
+[NoteIButton,"OK"]
+[Note,[StrMerge,"未找到: ",zbGozPath,"\n请先运行 Export 按钮"],,,4737096,,300]
+[Exit]
+]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Import]
+[Delay,0.8]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbMsg,[StrMerge,"I1 导入Base后 工具: ",zbStName,"\n"]]
+[RoutineCall,ZP6Log]
+[VarSet,zbMaxS,0]
+[VarSet,zbCurS,0]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMaxS,[IGetMax,Tool:Geometry:SDiv]]
+[VarSet,zbCurS,[IGet,Tool:Geometry:SDiv]]
+[VarSet,zbMsg,[StrMerge,"I1 SDivMax: ",[Val,zbMaxS]," SDivCur: ",[Val,zbCurS],"\n"]]
+[RoutineCall,ZP6Log]
+]
+[RoutineCall,ZP6Detect]
+[VarSet,zbMsg,[StrMerge,"I1 层数: ",[Val,zbCount]," (基准应无层=0)\n"]]
+[RoutineCall,ZP6Log]
+//--- I2 切最高SDiv ---
+[If,zbMaxS > 0,
+[ISet,Tool:Geometry:SDiv,zbMaxS]
+[VarSet,zbMsg,[StrMerge,"I2 已切最高SDiv: ",[Val,zbMaxS],"\n"]]
+[RoutineCall,ZP6Log]
+]
+//--- I3 逐层还原 (k=0..count-1, 文件序=layerIndex 升序) ---
+[VarSet,zbMsg,"--- I3 逐层还原 ---\n"]
+[RoutineCall,ZP6Log]
+[VarSet,zbCount,0]
+[VarSet,zbI,0]
+[Loop,2,
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_Layer",[Val,zbI],".goz"]]
+[If,[FileExists,zbGozPath],
+[If,zbCount > 0,
+[VarSet,zbI,0]
+[Loop,zbCount,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+[VarSet,zbJ,0]
+[Loop,zbCount,
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbJ < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbJ]
+]
+]
+[VarSet,zbBefore,zbCount]
+[IPress,Tool:Layers:New]
+[Delay,0.3]
+[RoutineCall,ZP6Detect]
+[VarSet,zbAfter,zbCount]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," New: ",zbBefore,"->",zbAfter,"\n"]]
+[RoutineCall,ZP6Log]
+[If,zbAfter == zbBefore+1,
+[VarSet,zbRecBit,0]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[If,(zbMod & 1) == 1,
+[VarSet,zbRecBit,1]
+]
+]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," rec=",[Val,zbRecBit],"\n"]]
+[RoutineCall,ZP6Log]
+[If,zbRecBit == 1,
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Import]
+[Delay,0.8]
+[VarSet,zbLi,0]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLi,1]
+]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," 导入后 li=",[Val,zbLi],"\n"]]
+[RoutineCall,ZP6Log]
+[If,zbLi == 1,
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[If,(zbMod & 1) == 1,
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[If,zbW > 10,
+[IClick,zbPath,zbW-25,zbH/2]
+[Delay,0.2]
+]
+]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," 退录制后 mod=",[Val,zbMod],"\n"]]
+[RoutineCall,ZP6Log]
+,
+[VarSet,zbCount,zbBefore]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," 层被清(替换路径)!\n"]]
+[RoutineCall,ZP6Log]
+]
+,
+[VarSet,zbCount,zbBefore]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," 未录制 跳过\n"]]
+[RoutineCall,ZP6Log]
+]
+,
+[VarSet,zbCount,zbBefore]
+[VarSet,zbMsg,[StrMerge,"I3 k=",[Val,zbI]," New未建成 跳过\n"]]
+[RoutineCall,ZP6Log]
+]
+]
+[VarInc,zbI]
+]
+//--- I4 恢复强度/可见性 ---
+[VarSet,zbMsg,"--- I4 恢复强度/可见性 ---\n"]
+[RoutineCall,ZP6Log]
+[If,zbCount > 0,
+[VarSet,zbI,0]
+[Loop,zbCount,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbI]
+]
+[VarSet,zbJ,0]
+[VarSet,zbRestOff,0]
+[Loop,zbCount,
+[VarSet,zbRec,""]
+[MemReadString,zbRefMem,zbRec,zbRestOff]
+[VarSet,zbLogBytes,[StrLength,zbRec]]
+[VarSet,zbRestOff,zbRestOff + zbLogBytes + 1]
+[VarSet,zbP1,[StrFind,"|",zbRec,0]]
+[VarSet,zbP2,[StrFind,"|",zbRec,zbP1+1]]
+[VarSet,zbP3,[StrFind,"|",zbRec,zbP2+1]]
+[VarSet,zbP4,[StrFind,"|",zbRec,zbP3+1]]
+[VarSet,zbP5,[StrFind,"|",zbRec,zbP4+1]]
+[VarSet,zbInt,[StrExtract,zbRec,zbP3+1,zbP4-1]]
+[VarSet,zbVal,[Val,[StrExtract,zbRec,zbP4+1,zbP5-1]]]
+[ISet,Tool:Layers:Layer Intensity,zbInt]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[VarSet,zbMod,[IModGet,zbPath]]
+[VarSet,zbVisCur,0]
+[If,(zbMod & 2) == 2,
+[VarSet,zbVisCur,1]
+]
+[If,zbVal == 1,
+[If,zbVisCur == 0,
+[If,zbW > 10,
+[IClick,zbPath,zbW-5,zbH/2]
+[Delay,0.15]
+]
+]
+]
+[VarSet,zbMsg,[StrMerge,"I4 位置",[Val,zbJ]," int=",zbInt," vis=",[Val,zbVal],"\n"]]
+[RoutineCall,ZP6Log]
+[If,zbJ < zbCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbJ]
+]
+]
+//--- I5 切回原SDiv ---
+[If,zbCurS > 0,
+[If,[IExists,Tool:Geometry:SDiv],
+[ISet,Tool:Geometry:SDiv,zbCurS]
+[VarSet,zbMsg,[StrMerge,"I5 已切回 SDiv: ",[Val,zbCurS],"\n"]]
+[RoutineCall,ZP6Log]
+]
+]
+[VarSet,zbMsg,"=== IMPORT 完成 ===\n"]
+[RoutineCall,ZP6Log]
+[MemResize,zbLogMem,zbLogOff]
+[VarSet,zbGozPath,[StrMerge,zbDir,"probe6_import_log.txt"]]
+[MemSaveToFile,zbLogMem,zbGozPath]
+[MemDelete,zbLogMem]
+[MemDelete,zbRefMem]
+[NoteIButton,"OK"]
+[Note,"Import 完成\n\n数据: probe6_import_log.txt\n\n请手动检查:\n1) 层面板层数/层名\n2) 每层强度恢复后 网格=原叠加态?\n3) 拖动层强度 形变是否分别对应各层",,,4737096,,600]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+[IButton,"ZPlugin:ZBridge_Test:Go to Top",
+    "ZLayer_probe6: SelectUp 饱和到栈顶(多按无害)。",
+    [RoutineCall,ZP6GoTop]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Prev Layer",
+    "ZLayer_probe6: SelectUp 上一层。",
+    [RoutineCall,ZP6GoPrev]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Next Layer",
+    "ZLayer_probe6: SelectDown 下一层。",
+    [RoutineCall,ZP6GoNext]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Export Current",
+    "ZLayer_probe6: ISet1 后手动选路径导出当前层。",
+    [RoutineCall,ZP6ExportCur]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe6 Import",
+    "ZBridge 0.8.0 probe6: import layer restore verdict (New/record-mode/import-path).",
+    [RoutineCall,ZP6Imp]
+,,1]

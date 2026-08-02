@@ -1,0 +1,624 @@
+﻿//ZLayer_probe4 - ZBridge 0.8.0 方案A验证(单文件双按钮): 导出参考 + 录制导入复现
+//按钮1 Layer Probe4a: 导出 T4_A.goz (运行前手动设 LayerA=1/LayerB=0)
+//按钮2 Layer Probe4b: 命令矩阵 + New+Import 录制导入 + 退出录制探测 (运行前手动归零 LayerA/B)
+//流程: [手动]设LayerA=1/LayerB=0 -> 点Probe4a导出T4_A.goz -> [手动]归零LayerA/B -> 点Probe4b验证
+//注意: ①每个按钮运行期间为 Note 模态, 无操作空隙; 手动设置全部在按钮点击之间完成
+//     ②Probe4b 会弹出文件选择窗口(保存风格), 选中 T4_A.goz 后若提示覆盖, 点(是)即可——脚本只读取文件
+//加载: ZScript 面板 > Load (一次)；运行: ZPlugin:ZBridge_Test > Layer Probe4a / Layer Probe4b
+[VarDef,zbSavePath,""]
+[VarDef,zbMsg,""]
+[VarDef,zbVal,0]
+[VarDef,zbMod,0]
+[VarDef,zbGozPath,""]
+[VarDef,dynActive,0]
+[VarDef,zbCurSdiv,0]
+[VarDef,zbMaxSdiv,0]
+[VarDef,zbExportTempDir,""]
+
+//~~~Probe4a: 导出 T4_A.goz 形变参考文件~~~
+//运行前: 手动设 LayerA=1, LayerB=0 (层权重滑杆 0-1 值域, 1=100% 强度; 网格显示 LayerA 100% 形变)
+[RoutineDef,ZLayerProbe4aRun,
+//导出前读取真实状态并让用户确认
+[VarSet,zbMsg,"=== Probe4a: 导出前状态确认 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerA) 真实强度(0-1): ",[IGet,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerB) 真实强度(0-1): ",[IGet,Tool:Layers:LayerB],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(Intensity) UI: ",[IGet,Tool:Layers:Intensity],"\n"]]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前 SDiv: ",[IGet,Tool:Geometry:SDiv],"\n"]]
+]
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[VarSet,zbMsg,[StrMerge,zbMsg,"Dynamic 预览状态(1=开): ",[IGet,Tool:Geometry:s.Dynamic],"\n"]]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"\n请确认: LayerA 应为 1.0, LayerB 应为 0, 视口网格应为 LayerA 形变的正常大小。\n确认后点导出。"]]
+[NoteIButton,"导出"]
+[NoteIButton,"取消"]
+[VarSet,zbVal,[Note,zbMsg,,,4737096,,400]]
+[If,zbVal == 2,[Exit]]
+//--- 对齐 ZBRunExport 预处理: 记录并关闭 Dynamic 预览 -> 切最高细分 ---
+[VarSet,dynActive,0]
+[If,[IExists,Tool:Geometry:s.Dynamic],[VarSet,dynActive,[IGet,Tool:Geometry:s.Dynamic]]]
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],[IUnPress,Tool:Geometry:s.Dynamic]]
+]
+[VarSet,zbCurSdiv,0]
+[VarSet,zbMaxSdiv,0]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[VarSet,zbCurSdiv,[IGet,Tool:Geometry:SDiv]]
+[VarSet,zbMaxSdiv,[IGetMax,Tool:Geometry:SDiv]]
+[ISet,Tool:Geometry:SDiv,zbMaxSdiv]
+]
+]
+//--- 导出 (对齐 ZBRunExport: FileNameExtract 提取目录 + 正斜杠拼接, 再 FileNameSetNext) ---
+[VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","T4_A.goz","选择导出目录"]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[VarSet,zbExportTempDir,[FileNameExtract,zbSavePath,1]]
+[VarSet,zbGozPath,[StrMerge,zbExportTempDir,"/T4_A.goz"]]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Export]
+//--- 恢复状态: 恢复细分级别 -> 恢复 Dynamic 预览 ---
+[If,zbMaxSdiv > 0,
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],[IPress,Tool:Geometry:s.Dynamic]]
+]
+[VarSet,zbMsg,[StrMerge,"T4_A.goz 已导出到:\n",zbSavePath,"\n\n脚本已结束, 现在可自由操作。\n\n下一步: 手动把 LayerA 和 LayerB 强度都置为 0 (网格回到基准), 然后点击 Layer Probe4b 按钮。"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,,,4737096,,500]
+]
+
+//~~~Probe4b: 命令矩阵 + New+Import 录制导入复现 + 退出录制探测~~~
+//运行前: 确认 LayerA/B 均已置 0 (网格=基准), T4_A.goz 已由 Probe4a 导出
+[RoutineDef,ZLayerProbe4bRun,
+//======== Test1: 命令矩阵 - 读强度/身份 ========
+[VarSet,zbMsg,"=== Test1A: 命令矩阵 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IExists LayerA: ",[IExists,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IExists LayerB: ",[IExists,Tool:Layers:LayerB],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerA) 强度: ",[IGet,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerB) 强度: ",[IGet,Tool:Layers:LayerB],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(Intensity) UI缓存: ",[IGet,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IModGet(LayerA): ",[IModGet,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetTitle(LayerA): ",[IGetTitle,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetTitle(LayerA,1): ",[IGetTitle,Tool:Layers:LayerA,1],"\n"]]
+[If,[IExists,Tool:Layers:3D Layer 0],
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 0 存在, IGetTitle: ",[IGetTitle,Tool:Layers:3D Layer 0],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 0 路径不存在(跳过)\n"]]
+]
+[If,[IExists,Tool:Layers:3D Layer 1],
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 1 存在, IGetTitle: ",[IGetTitle,Tool:Layers:3D Layer 1],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 1 路径不存在(跳过)\n"]]
+]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//==== Test1B: 内容信息 + 强度往返 ====
+[VarSet,zbMsg,"=== Test1B: 内容/往返 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetInfo(LayerA) 长度: ",[StrLength,[IGetInfo,Tool:Layers:LayerA]],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetInfo(LayerA): ",[IGetInfo,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetStatus(LayerA): ",[IGetStatus,Tool:Layers:LayerA],"\n"]]
+//往返: 置0.5 -> 读回 -> 恢复0(保持基准, 不污染后续测试)
+[ISet,Tool:Layers:LayerA,0.5]
+[VarSet,zbVal,[IGet,Tool:Layers:LayerA]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"往返 ISet(LayerA,0.5) 后 IGet: ",[Val,zbVal],"\n"]]
+[ISet,Tool:Layers:LayerA,0]
+[VarSet,zbVal,[IGet,Tool:Layers:LayerA]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"恢复 ISet(LayerA,0) 后 IGet: ",[Val,zbVal],"(应为0)\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Test2: New(自动录制) + Import T4_A.goz ========
+[VarSet,zbMsg,"=== Test2: New + Import 录制导入 ===\n"]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMsg,[StrMerge,zbMsg,"New 前 SDiv: ",[IGet,Tool:Geometry:SDiv],"\n"]]
+]
+[VarSet,zbMod,[IModGet,Tool:Layers:LayerA]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"New 前 IModGet(LayerA): ",[Val,zbMod],"\n"]]
+[IPress,Tool:Layers:New]
+[VarSet,zbMod,[IModGet,Tool:Layers:LayerA]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"New 后 IModGet(LayerA): ",[Val,zbMod],"\n"]]
+[If,[IExists,Tool:Layers:3D Layer 0],
+[VarSet,zbMsg,[StrMerge,zbMsg,"New 后 IGetTitle(3D Layer 0): ",[IGetTitle,Tool:Layers:3D Layer 0],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"New 后 3D Layer 0 路径不存在\n"]]
+]
+[NoteIButton,"OK"]
+[Note,"请选择 T4_A.goz 文件:\n\n弹窗样式为保存窗口, 这是 ZBrush 唯一的文件选择对话框。选中已存在的 T4_A.goz 后若提示覆盖, 点(是)即可——脚本只读取该文件, 不会真的写文件。",,,4737096,,400]
+[VarSet,zbGozPath,[FileNameAsk,"GoZ(*.goz)|*.goz||","T4_A.goz","选择已导出的 T4_A.goz (提示覆盖时点是)"]]
+[If,[StrLength,zbGozPath] <= 0,[Exit]]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Import]
+[VarSet,zbMod,[IModGet,Tool:Layers:LayerA]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Import 后 IModGet(LayerA): ",[Val,zbMod],"\n"]]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMsg,[StrMerge,zbMsg,"Import 后 SDiv: ",[IGet,Tool:Geometry:SDiv],"\n"]]
+]
+[If,[IExists,Tool:Layers:3D Layer 0],
+[VarSet,zbMsg,[StrMerge,zbMsg,"Import 后 IGetTitle(3D Layer 0): ",[IGetTitle,Tool:Layers:3D Layer 0],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"Import 后 3D Layer 0 路径不存在\n"]]
+]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Test3: 退出录制 IClick 探测(候选坐标盲试) ========
+[VarSet,zbMsg,"=== Test3: 退出录制 IClick 探测 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"探测前 IModGet(LayerA): ",[IModGet,Tool:Layers:LayerA],"\n"]]
+[If,[IExists,Tool:Layers:3D Layer 0],
+[IClick,Tool:Layers:3D Layer 0,8,8]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(3D Layer 0,8,8) 后 IModGet(LayerA): ",[IModGet,Tool:Layers:LayerA],"\n"]]
+[IClick,Tool:Layers:3D Layer 0,10,8]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(3D Layer 0,10,8) 后 IModGet(LayerA): ",[IModGet,Tool:Layers:LayerA],"\n"]]
+[IClick,Tool:Layers:3D Layer 0,12,12]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(3D Layer 0,12,12) 后 IModGet(LayerA): ",[IModGet,Tool:Layers:LayerA],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"3D Layer 0 路径不存在, 跳过 IClick 探测\n"]]
+]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Test4: 结束提示 - 请用户手动检查并报告 ========
+[NoteIButton,"OK"]
+[Note,"ZLayer Probe4b 全部完成, 现在可自由操作。\n\n请检查并报告:\n1) 把新层强度调到 1, 网格是否显示 LayerA 形变?(=录制导入成功)\n2) New 后是否自动进入录制?(REC 图标亮)\n3) Test3 的 IClick 是否让录制退出?(IModGet 值变化)\n4) 若仍录制中, 请手动点 REC 退出, 观察网格是否回基准。",,,4737096,,600]
+]
+
+//~~~Probe4aM: 手动导出对照 (模拟手动点 Tool>Export, 与脚本导出对比尺寸)~~~
+//用途: 同状态(LayerA=1)下, 手动对话框导出 T4_A_man.goz, 与脚本导出的 T4_A.goz 对比网格尺寸
+//若 T4_A.goz 小但 T4_A_man.goz 正常 -> FileNameSetNext 脚本导出机制问题
+//若两者都小 -> 导出时网格状态问题(强度/细分等), 与导出方式无关
+[RoutineDef,ZLayerProbe4aMRun,
+[NoteIButton,"OK"]
+[Note,"Probe4aM: 手动导出对照\n\n将弹出 ZBrush 原生 GoZ 导出对话框(与手动点 Tool>Export 完全一致)。\n请选择目录并把文件名改为 T4_A_man.goz, 点保存。",,,4737096,,500]
+[IPress,Tool:Export]
+[NoteIButton,"OK"]
+[Note,"T4_A_man.goz 已手动导出。\n\n请用 ZBrush 正常打开对比:  T4_A.goz(脚本) vs T4_A_man.goz(手动) 的网格尺寸。",,,4737096,,400]
+]
+
+//~~~Probe4c: 层枚举官方方案验证 (v4, ZBrushCentral 实测方案)~~~
+//官方方案: 层数 = ISet(Scrollbar,0,255) 后 IGetSecondary(Scrollbar)
+//  层名 = 逐层 ISet(Scrollbar,0,count-i) 后 IGetTitle("Tool:Layers:3D Layer 0",0)  [第二参数 0 读槽位标题=窗口顶层层名]
+//之前"槽位死/滚动条死"是误判: 缺第二参数 0 + 用错读法(IGet/IGetMax vs IGetSecondary)
+//3 段 Note 分段弹窗, 任一段报错前面数据保留
+[RoutineDef,ZLayerProbe4cRun,
+[VarDef,zbLCount,0]
+//Note1: 层数
+[VarSet,zbMsg,"=== Probe4c-1: 层数(官方方案) ===\n"]
+[ISet,Tool:Layers:Layers Scrollbar,0,255]
+[VarSet,zbLCount,[IGetSecondary,Tool:Layers:Layers Scrollbar]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"ISet(Scrollbar,0,255) 后 IGetSecondary(层数, 0-based): ",[Val,zbLCount],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"滚动条 IGet(对照): ",[IGet,Tool:Layers:Layers Scrollbar],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+//Note2: 层名枚举(逐层滚动 + IGetTitle(3D Layer 0, 0))
+[VarSet,zbMsg,"=== Probe4c-2: 层名枚举(逐层滚动) ===\n"]
+[VarSet,zbI,0]
+[Loop,zbLCount+1,
+[ISet,Tool:Layers:Layers Scrollbar,0,zbLCount-zbI]
+[VarSet,zbMsg,[StrMerge,zbMsg,"第",[Val,zbI],"层名: ",[IGetTitle,Tool:Layers:3D Layer 0,0],"\n"]]
+[VarInc,zbI]
+]
+[ISet,Tool:Layers:Layers Scrollbar,0,0]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+//Note3: 按名称强度交叉验证(读出的层名与按名称 IGet 对照)
+[VarSet,zbMsg,"=== Probe4c-3: 按名称强度交叉验证 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerA): ",[IGet,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(LayerB): ",[IGet,Tool:Layers:LayerB],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(Intensity) UI: ",[IGet,Tool:Layers:Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+]
+
+//~~~Probe4d: 层名读取候选 (独立按钮组, 报错不连锁)~~~
+//线索: ①marcus_civis(2007): StrMerge 构建 "Tool:Layers:3D Layer N" 路径
+//      ②Kwai(2011+): 层名 = Layer Intensity 滑杆标题
+//      ③IGetFlags: 层选中检测(>8 选中)
+//每个按钮独立 RoutineDef: 任一报错只影响该按钮, 其余可继续
+[RoutineDef,ZLayerProbe4d1Run,
+[VarDef,zbPath,""]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:3D Layer ",[Val,0]]]
+[VarSet,zbMsg,"=== d1: StrMerge 构建槽位路径 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"路径: ",zbPath,"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IExists: ",[IExists,zbPath],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetTitle(,0) 标题: ",[IGetTitle,zbPath,0],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetTitle(,1) full: ",[IGetTitle,zbPath,1],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+]
+[RoutineDef,ZLayerProbe4d2Run,
+[VarSet,zbMsg,"=== d2: Layer Intensity 标题(当前层名?) ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Layer Intensity IExists: ",[IExists,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Layer Intensity IGetTitle: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Layer Intensity IGetTitle(,1): ",[IGetTitle,Tool:Layers:Layer Intensity,1],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"对照 Intensity IGetTitle: ",[IGetTitle,Tool:Layers:Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+]
+[RoutineDef,ZLayerProbe4d3Run,
+[VarDef,zbPath,""]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:3D Layer ",[Val,0]]]
+[VarSet,zbMsg,"=== d3: IGetFlags (层选中检测) ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetFlags(槽位0): ",[IGetFlags,zbPath],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetFlags(Intensity): ",[IGetFlags,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetFlags(Scrollbar): ",[IGetFlags,Tool:Layers:Layers Scrollbar],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+]
+[RoutineDef,ZLayerProbe4d4Run,
+[VarSet,zbMsg,"=== d4: Intensity 滑杆信息(当前层?) ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IGetInfo: ",[IGetInfo,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IGetStatus: ",[IGetStatus,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IGetMax: ",[IGetMax,Tool:Layers:Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"Intensity IGetMin: ",[IGetMin,Tool:Layers:Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,600]
+]
+
+//~~~Probe4e: 层遍历+可见性验证 (核心机制最后确认)~~~
+//背景: Layer Intensity 滑杆标题 = 当前层名(已验证) -> 用它检测 SelectDown 导航
+//验证: ①SelectDown 是否切换当前层(标题变化) ②每层按名称 IGet 强度 ③IGetStatus 是否反映可见性(开/关)
+//全安全命令: IGetTitle/IGet/IGetStatus + IPress(SelectDown), 不会报错
+[RoutineDef,ZLayerProbe4eRun,
+[VarDef,zbCur,""]
+[VarSet,zbMsg,"=== Probe4e: 层遍历+可见性 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前层: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"--- 循环 8 步 (每步: 层名 | 强度 | IGetStatus) ---\n"]]
+[VarSet,zbI,0]
+[Loop,8,
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"步",[Val,zbI],": ",zbCur," | 强度 ",zbCur,"=",[IGet,[StrMerge,"Tool:Layers:",zbCur]]," | Status=",[IGetStatus,[StrMerge,"Tool:Layers:",zbCur]],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarInc,zbI]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"--- 8 步后当前层: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"--- SelectUp x4 返回 ---\n"]]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectUp x4 后当前层: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,700]
+]
+
+//~~~Probe4f: 导航机制三候选 (SelectDown / SelectUp / Scrollbar 选层)~~~
+//背景: Probe4e 中 8x SelectDown 标题始终 LayerB (可能已到底 no-op), 且输出被截断未见 SelectUp
+//候选: ①SelectDown ②SelectUp ③ISet(Scrollbar,0,i) 直接选层 -> Layer Intensity 标题联动
+//目标: 找出能切换"当前层"的通路 (标题随之变化 = 枚举可用)
+//分两段 Note 防截断: Note1 = 导航按钮, Note2 = 滚动条选层
+[RoutineDef,ZLayerProbe4fRun,
+[VarDef,zbLCount,0]
+[VarSet,zbMsg,"=== Probe4f-1: 导航按钮 ===\n"]
+[ISet,Tool:Layers:Layers Scrollbar,0,255]
+[VarSet,zbLCount,[IGetSecondary,Tool:Layers:Layers Scrollbar]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"层数(0-based): ",[Val,zbLCount],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"起点标题: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[SelectDown x3]\n"]]
+[VarSet,zbI,0]
+[Loop,3,
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbMsg,[StrMerge,zbMsg,"d",[Val,zbI],": ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarInc,zbI]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[SelectUp x6 回顶]\n"]]
+[VarSet,zbI,0]
+[Loop,6,
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbMsg,[StrMerge,zbMsg,"u",[Val,zbI],": ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarInc,zbI]
+]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,800]
+//Note2: 滚动条选层联动 (ISet 第2参数 = 层索引?)
+[VarSet,zbMsg,"=== Probe4f-2: 滚动条选层联动 ===\n"]
+[VarSet,zbI,0]
+[Loop,zbLCount+1,
+[ISet,Tool:Layers:Layers Scrollbar,0,zbI]
+[VarSet,zbMsg,[StrMerge,zbMsg,"s",[Val,zbI],": ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[VarInc,zbI]
+]
+[ISet,Tool:Layers:Layers Scrollbar,0,0]
+[VarSet,zbMsg,[StrMerge,zbMsg,"复位后标题: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,800]
+]
+
+//~~~Probe4g: 可见性/强度解耦读矩阵 (LayerA 可见开 vs LayerB 可见关)~~~
+//背景: Probe4e 显示 LayerB(可见关) IGetStatus=1, 可见性≠IGetStatus; 需找跟随可见性的命令
+//解耦设计: S1=LayerA(强度1,可见开) S2=LayerA(置强度0,仍可见开) S3=LayerB(强度0.5,可见关)
+//  若命令 S1=1 S2=1 S3=0 -> 跟随可见性 (S2 证明与强度无关)
+//  若命令 S1=1 S2=0 S3=0.5 -> 跟随强度
+//Part A: 核心候选 (IGet/IGetStatus/IGetFlags/IModGet) -> Note1
+//Part B: 扩展候选 (IGetInfo/IGetSecondary/IGetMax/IGetMin) -> Note2 (可能报错, 但 Note1 数据已保留)
+[RoutineDef,ZLayerProbe4gReadA,
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"] IGet=",[IGet,zbPath]," | Status=",[IGetStatus,zbPath]," | Flags=",[IGetFlags,zbPath]," | Mod=",[IModGet,zbPath],"\n"]]
+]
+[RoutineDef,ZLayerProbe4gReadB,
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"] Info=",[IGetInfo,zbPath]," | Sec=",[IGetSecondary,zbPath]," | Max=",[IGetMax,zbPath]," | Min=",[IGetMin,zbPath],"\n"]]
+]
+[RoutineDef,ZLayerProbe4gRun,
+[VarDef,zbCur,""]
+[VarDef,zbPrev,""]
+[VarDef,zbPath,""]
+//--- 到栈顶 (SelectUp 连续相等检测) ---
+[Loop,64,
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbPrev,[IGetTitle,Tool:Layers:Layer Intensity]]
+[If,[StrLength,zbCur] == [StrLength,zbPrev],
+[If,[StrFind,zbCur,zbPrev] == 0,[LoopExit]
+]
+]
+]
+//--- Part A: 核心候选, 三层状态 ---
+[VarSet,zbMsg,"=== Probe4g-A: 核心候选 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"S1: LayerA(强度1,可见开)\n"]]
+[RoutineCall,ZLayerProbe4gReadA]
+[VarSet,zbMsg,[StrMerge,zbMsg,"S2: LayerA 置强度0(仍可见开) -> 值不变则非强度驱动\n"]]
+[ISet,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]],0]
+[RoutineCall,ZLayerProbe4gReadA]
+[VarSet,zbMsg,[StrMerge,zbMsg,"恢复 LayerA=1\n"]]
+[ISet,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]],1]
+[RoutineCall,ZLayerProbe4gReadA]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbMsg,[StrMerge,zbMsg,"S3: LayerB(强度0.5,可见关)\n"]]
+[RoutineCall,ZLayerProbe4gReadA]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,900]
+//--- Part B: 扩展候选 (若报错, Note1 数据已保留) ---
+[VarSet,zbMsg,"=== Probe4g-B: 扩展候选 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"S1: LayerA(1,开)\n"]]
+[IPress,Tool:Layers:SelectUp]
+[RoutineCall,ZLayerProbe4gReadB]
+[VarSet,zbMsg,[StrMerge,zbMsg,"S3: LayerB(0.5,关)\n"]]
+[IPress,Tool:Layers:SelectDown]
+[RoutineCall,ZLayerProbe4gReadB]
+[VarSet,zbMsg,[StrMerge,zbMsg,"结束位置: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,900]
+]
+
+//~~~Probe4h: Layer Intensity 滑杆值/写语义 (当前层强度?)~~~
+//背景: 层可重名 -> 按名寻址(ISet/IGet Tool:Layers:<名>)不可靠; 需选择式寻址
+//假设: Layer Intensity 滑杆(标题=当前层名) 的值 = 当前层强度, ISet 写当前层
+//若成立: 快照/恢复全程用 导航+滑杆, 重名免疫
+//Part1 只读(安全, Note1): 栈顶与 LayerB 的 IGet(滑杆) vs IGet(按名) 对照
+//Part2 写测试(Note2, 若 ISet 报错 Note1 已保留): ISet(滑杆,v) 往返 + 层间独立
+[RoutineDef,ZLayerProbe4hRun,
+[VarDef,zbCur,""]
+[VarDef,zbPath,""]
+//--- Part1: 只读对照 ---
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbMsg,"=== Probe4h-1: 滑杆值只读对照 ===\n"]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"栈顶: ",zbCur,"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(Layer Intensity)=",[IGet,Tool:Layers:Layer Intensity]," | IGet(",zbCur,")=",[IGet,zbPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown 后: ",zbCur,"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGet(Layer Intensity)=",[IGet,Tool:Layers:Layer Intensity]," | IGet(",zbCur,")=",[IGet,zbPath],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,900]
+//--- Part2: ISet 写测试 (先回栈顶) ---
+[VarSet,zbMsg,"=== Probe4h-2: ISet 滑杆写 ===\n"]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"栈顶: ",zbCur," ISet(Layer Intensity,0.7)\n"]]
+[ISet,Tool:Layers:Layer Intensity,0.7]
+[VarSet,zbMsg,[StrMerge,zbMsg,"  滑杆=",[IGet,Tool:Layers:Layer Intensity]," 按名=",[IGet,zbPath],"\n"]]
+[ISet,Tool:Layers:Layer Intensity,1]
+[VarSet,zbMsg,[StrMerge,zbMsg,"  恢复1: 滑杆=",[IGet,Tool:Layers:Layer Intensity]," 按名=",[IGet,zbPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,zbCur," ISet(Layer Intensity,0.3) (验证层间独立, 应只改本层)\n"]]
+[ISet,Tool:Layers:Layer Intensity,0.3]
+[VarSet,zbMsg,[StrMerge,zbMsg,"  滑杆=",[IGet,Tool:Layers:Layer Intensity]," 按名=",[IGet,zbPath],"\n"]]
+[ISet,Tool:Layers:Layer Intensity,0.5]
+[VarSet,zbMsg,[StrMerge,zbMsg,"  恢复0.5: 滑杆=",[IGet,Tool:Layers:Layer Intensity],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"结束位置: ",[IGetTitle,Tool:Layers:Layer Intensity],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,900]
+]
+
+//~~~Probe4i: 可见性关键验证 (LayerB 可见关的 Flags/Mod + 形变是否被阻断)~~~
+//背景: Probe4g-A 缺 LayerB 的 Flags/Mod (S3 截断 + IGetSecondary 报错)
+//假设: IGetFlags bit1(值2) = 可见性 (LayerA 可见开 Flags=10; 若 LayerB 可见关 Flags=8 则坐实)
+//      IModGet bit1(值2) = 强度>0 激活位 (已证: 置0后 2→0)
+//几何验证: LayerB 可见关 + 强度置1 -> 网格是否出现 LayerB 形变?
+//  变化 → 可见性不影响几何/导出 → T3 快照无需控制可见性
+//  不变 → 可见关阻断形变 → T3 快照必须先开可见 (设置法待下一步探测)
+[RoutineDef,ZLayerProbe4iRun,
+[VarDef,zbCur,""]
+[VarDef,zbPath,""]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbMsg,"=== Probe4i: 可见性验证 ===\n"]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"(可见开)] IGet=",[IGet,zbPath]," Flags=",[IGetFlags,zbPath]," Mod=",[IModGet,zbPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"(可见关)] IGet=",[IGet,zbPath]," Flags=",[IGetFlags,zbPath]," Mod=",[IModGet,zbPath],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"\nLayerA Flags=10(bit1+bit3) 若 LayerB Flags=8(bit3) -> bit1=可见性坐实"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,,,4737096,,800]
+//--- 几何验证: LayerB(可见关) 置强度1 ---
+[ISet,Tool:Layers:Layer Intensity,1]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"] 强度已置 1 (可见性仍=关)"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,[StrMerge,zbMsg,"\n\n请观察视口网格:\n- 网格出现 ",zbCur," 的形变 -> 可见性不影响几何/导出, 快照无需控制可见性\n- 网格不变 -> 可见关阻断形变, 快照需先开可见(设置法待探)\n\n观察后点 OK 恢复 ",zbCur,"=0.5。"]]
+[ISet,Tool:Layers:Layer Intensity,0.5]
+[NoteIButton,"OK"]
+[Note,"已恢复 0.5。"]
+]
+
+//~~~Probe4j: IModSet bit1 可见性设置验证 (双向裁决)~~~
+//背景: Mod 三态 LayerA(int1,开)=2 / LayerA(int0,开)=0 / LayerB(int0.5,关)=0
+//  假设甲: Mod bit1=可见性 (S2 需解释为 ISet 强度0 自动关可见)
+//  假设乙: Mod bit1=强度==1 (满值才置位)
+//裁决: IModSet(<层路径>,2) 若让 LayerB(0.5) 形变显示 -> 甲成立且拿到可见性设置法
+//      IModSet(<层路径>,0) 若让 LayerA(1) 形变消失 -> 反向确认
+//观察点: Note2/Note3/Note4 各看一次视口
+[RoutineDef,ZLayerProbe4jRun,
+[VarDef,zbCur,""]
+[VarDef,zbPath,""]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+//--- 基线 + 测试1: IModSet(LayerB,2) ---
+[VarSet,zbMsg,"=== Probe4j: IModSet 可见性裁决 ===\n"]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"基线 [",zbCur,"] Mod=",[IModGet,zbPath],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"基线 [",zbCur,"] Mod=",[IModGet,zbPath],"\n"]]
+[IModSet,zbPath,2]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已 IModSet(",zbCur,",2) -> Mod=",[IModGet,zbPath],"\n"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,[StrMerge,zbMsg,"\n\n请观察视口网格: [",zbCur,"] (强度0.5, 原本可见关)\n- 出现其形变 -> Mod bit1=可见性, 甲成立 (IModSet=可见性设置法)\n- 无变化 -> 乙(强度==1)或不可写"]]
+//--- 测试2: IModSet(LayerB,0) 恢复 ---
+[IModSet,zbPath,0]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已 IModSet(",zbCur,",0) -> Mod=",[IModGet,zbPath]]]
+[NoteIButton,"OK"]
+[Note,zbMsg,[StrMerge,zbMsg,"\n\n请观察: [",zbCur,"] 形变是否又消失? (确认双向)"]]
+//--- 测试3: IModSet(LayerA,0) 关可见 ---
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[IModSet,zbPath,0]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已 IModSet(",zbCur,",0) -> Mod=",[IModGet,zbPath]]]
+[NoteIButton,"OK"]
+[Note,zbMsg,[StrMerge,zbMsg,"\n\n请观察: [",zbCur,"] (强度1, 原本可见开) 形变是否消失?"]]
+//--- 恢复 LayerA=2 ---
+[IModSet,zbPath,2]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已恢复 [",zbCur,"] Mod=2 -> Mod=",[IModGet,zbPath],"\n全部完成。"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,,,4737096,,600]
+]
+
+//~~~Probe4k: 眼睛 IClick 位置发现 (开可见性)~~~
+//背景: 可见关阻断形变(Probe4i 用户确认"网格没变化"); Mod bit1 只读(Probe4j IModSet 无效)
+//  强度=0 自动关眼(用户确认); 开眼 = IClick 层行右侧小眼睛
+//目标: 找到眼睛的 IClick 坐标 (行宽 W/高 H -> 右缘试探), 并用 Mod 读回确认
+//恢复: 强度=0 自动关眼(稳定路径) -> 恢复原强度(不会自动开眼, Probe4i 已证)
+[RoutineDef,ZLayerProbe4kRun,
+[VarDef,zbCur,""]
+[VarDef,zbPath,""]
+[VarDef,zbW,0]
+[VarDef,zbH,0]
+[VarDef,zbM0,0]
+[VarDef,zbM1,0]
+[VarDef,zbM2,0]
+[VarDef,zbM3,0]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectUp]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbCur,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbPath,[StrMerge,"Tool:Layers:",zbCur]]
+[VarSet,zbM0,[IModGet,zbPath]]
+[VarSet,zbW,[IWidth,zbPath]]
+[VarSet,zbH,[IHeight,zbPath]]
+[VarSet,zbMsg,"=== Probe4k: 眼睛 IClick 发现 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"[",zbCur,"] 基线 Mod=",[Val,zbM0]," W=",[Val,zbW]," H=",[Val,zbH],"\n"]]
+[IClick,zbPath,zbW-5,zbH/2]
+[VarSet,zbM1,[IModGet,zbPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(w-5)  -> Mod=",[Val,zbM1],"\n"]]
+[IClick,zbPath,zbW-15,zbH/2]
+[VarSet,zbM2,[IModGet,zbPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(w-15) -> Mod=",[Val,zbM2],"\n"]]
+[IClick,zbPath,zbW-25,zbH/2]
+[VarSet,zbM3,[IModGet,zbPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IClick(w-25) -> Mod=",[Val,zbM3],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"\n若某次 Mod 变 2 -> 该位置即眼睛坐标(开眼成功)\n请同时观察视口: [",zbCur,"] 形变是否出现"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,,,4737096,,900]
+//--- 恢复: 强度0 自动关眼 -> 恢复原强度0.5 (不会自动开) ---
+[ISet,Tool:Layers:Layer Intensity,0]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已置强度0 -> Mod=",[IModGet,zbPath],"\n"]]
+[ISet,Tool:Layers:Layer Intensity,0.5]
+[VarSet,zbMsg,[StrMerge,zbMsg,"已恢复0.5 -> Mod=",[IModGet,zbPath]," (应为0=仍关, 证明强度不会自动开眼)"]]
+[NoteIButton,"OK"]
+[Note,zbMsg,,,4737096,,700]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4a",
+    "ZBridge 0.8.0 layer probe4a: export T4_A.goz reference (LayerA=1/LayerB=0).",
+    [RoutineCall,ZLayerProbe4aRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4aM",
+    "ZBridge 0.8.0 layer probe4aM: manual dialog export contrast (same state, compare size).",
+    [RoutineCall,ZLayerProbe4aMRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4b",
+    "ZBridge 0.8.0 layer probe4b: cmd matrix + New+Import recording replay + exit-record probe.",
+    [RoutineCall,ZLayerProbe4bRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4c",
+    "ZBridge 0.8.0 layer probe4c: enumerate 3D Layer 0-7 slots (weight/name) + SelectDown nav.",
+    [RoutineCall,ZLayerProbe4cRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4d1",
+    "ZBridge 0.8.0 layer probe4d1: StrMerge-built slot path read.",
+    [RoutineCall,ZLayerProbe4d1Run]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4d2",
+    "ZBridge 0.8.0 layer probe4d2: Layer Intensity slider title (current layer name?).",
+    [RoutineCall,ZLayerProbe4d2Run]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4d3",
+    "ZBridge 0.8.0 layer probe4d3: IGetFlags selected-layer detection.",
+    [RoutineCall,ZLayerProbe4d3Run]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4d4",
+    "ZBridge 0.8.0 layer probe4d4: Intensity slider info/status.",
+    [RoutineCall,ZLayerProbe4d4Run]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4e",
+    "ZBridge 0.8.0 layer probe4e: SelectDown nav + per-layer intensity + IGetStatus visibility.",
+    [RoutineCall,ZLayerProbe4eRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4f",
+    "ZBridge 0.8.0 layer probe4f: nav candidates SelectDown/SelectUp/Scrollbar-select.",
+    [RoutineCall,ZLayerProbe4fRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4g",
+    "ZBridge 0.8.0 layer probe4g: visibility/intensity decoupled read matrix (LayerA vs LayerB).",
+    [RoutineCall,ZLayerProbe4gRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4h",
+    "ZBridge 0.8.0 layer probe4h: Layer Intensity slider value/ISet semantics (current layer intensity).",
+    [RoutineCall,ZLayerProbe4hRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4i",
+    "ZBridge 0.8.0 layer probe4i: visibility flags (LayerB) + geometry-block check.",
+    [RoutineCall,ZLayerProbe4iRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4j",
+    "ZBridge 0.8.0 layer probe4j: IModSet bit1 visibility set test (bidirectional verdict).",
+    [RoutineCall,ZLayerProbe4jRun]
+,,1]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe4k",
+    "ZBridge 0.8.0 layer probe4k: eye IClick position discovery (open visibility).",
+    [RoutineCall,ZLayerProbe4kRun]
+,,1]

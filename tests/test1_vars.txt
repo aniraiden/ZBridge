@@ -1,0 +1,26 @@
+﻿//ZBridge Test 1 - Variables and If
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zb_toolName,""]
+[VarDef,zb_subToolCount,0]
+[VarDef,zb_noteText,""]
+[VarDef,zb_platformStr,"Windows"]
+
+[RoutineDef,ZB_GetSystemInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+[If,isMac,[VarSet,zb_platformStr,"Mac"]]
+]
+
+[ISubPalette,"ZPlugin:ZBridgeTest1"]
+
+[IButton,"ZPlugin:ZBridgeTest1:System Info",
+    "Show system info",
+    [RoutineCall,ZB_GetSystemInfo]
+    [NoteIButton,"Close"]
+    [VarSet,zb_noteText,[StrMerge,
+"ZBridge Test\n\n",
+"ZBrush Version: ",ZVers,"\n",
+"Platform: ",zb_platformStr]]
+    [Note,zb_noteText,,1,4737096,,250]
+,,1]

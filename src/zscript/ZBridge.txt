@@ -1,0 +1,1578 @@
+﻿//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//ZBridge - ZBrush Cross-Version Tool Migration Plugin
+//Version: 0.8.0
+//Description: Export/Import Tools across different ZBrush versions via GoZ format
+//             + Folder structure reconstruction + visibility fix
+//             + duplicate subtool name check
+//             + dynamic subdivision preview attribute restore (8 attrs via ext field)
+//             + color texture rebind (hasTexture/textureFile via ext field)
+//             + sculpt layer snapshot (Tool:Layers base/layer GoZ snapshots + layers.txt)
+//Usage: Load via ZScript panel > Load button
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//~~~GLOBAL VARIABLES~~~
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbToolName,""]
+[VarDef,zbSubToolCount,0]
+[VarDef,zbExportTempDir,""]
+[VarDef,zbImportDir,""]
+[VarDef,zbSavePath,""]
+[VarDef,zbIdx,0]
+[VarDef,zbStName,""]
+[VarDef,zbGozPath,""]
+[VarDef,zbConfirmText,""]
+[VarDef,zbNoteText,""]
+[VarDef,zbCf,0]
+[VarDef,zbPlatformStr,"Windows"]
+[VarDef,zbInputFile,""]
+[VarDef,zbGozCount,0]
+[VarDef,zbGozFile,""]
+[VarDef,zbImportErrors,0]
+[VarDef,zbActiveST,0]
+[VarDef,zbMainToolID,0]
+[VarDef,zbTempName,""]
+[VarDef,zbColorizeState,0]
+[VarDef,zbPpFlag,""]
+[VarDef,zbManPath,""]
+[VarDef,zbManMem,"ZBManMem"]
+[VarDef,zbManLine,""]
+[VarDef,zbMaxSdiv,0]
+[VarDef,zbSdivStr,""]
+[VarDef,zbSdivFlag,""]
+[VarDef,zbCurSdiv,0]
+[VarDef,zbCurSdivStr,""]
+[VarDef,zbPipePos1,0]
+[VarDef,zbPipePos2,0]
+[VarDef,zbPipePos3,0]
+//0.2.0 - folder & visibility support
+[VarDef,zbStatus,0]
+[VarDef,zbIsFolder,0]
+[VarDef,zbSubtoolEye,0]
+[VarDef,zbFolderEye,0]
+[VarDef,zbIsOpened,0]
+[VarDef,zbFolderName,""]
+[VarDef,zbMeshIdx,0]
+[VarDef,zbSubEyeStr,""]
+[VarDef,zbFolEyeStr,""]
+[VarDef,zbFolStr,""]
+[VarDef,zbOpenStr,""]
+[VarDef,zbFolNameStr,""]
+[VarDef,zbPipePos4,0]
+[VarDef,zbPipePos5,0]
+[VarDef,zbPipePos6,0]
+[VarDef,zbPipePos7,0]
+[VarDef,zbPipePos8,0]
+
+//0.3.0 - folder reconstruction
+[VarDef,dllPath,""]
+[VarDef,zbFolderTotal,0]
+//0.5.0 - duplicate subtool name check (pre-export abort)
+[VarDef,zbDupMem,"ZBDupMem"]
+[VarDef,zbDupOffset,0]
+[VarDef,zbDupBytes,0]
+[VarDef,zbDupFound,0]
+[VarDef,zbDupCount,0]
+[VarDef,zbDupMsg,""]
+[VarDef,zbDupNameA,""]
+[VarDef,zbDupNameB,""]
+[VarDef,zbDupLenA,0]
+[VarDef,zbDupLenB,0]
+[VarDef,zbDupOffA,0]
+[VarDef,zbDupOffB,0]
+[VarDef,zbDupI,0]
+[VarDef,zbDupJ,0]
+[VarDef,zbDupIsNew,0]
+//0.6.0 - dynamic subdivision preview attributes (8 attrs, manifest ext field)
+[VarDef,dynActive,0]
+[VarDef,dynFlat,0]
+[VarDef,dynSmooth,0]
+[VarDef,dynThick,0]
+[VarDef,dynSegs,0]
+[VarDef,dynPost,0]
+[VarDef,dynOffset,0]
+[VarDef,dynSmoothness,0]
+[VarDef,zbExtStr,""]
+[VarDef,zbExtKey,""]
+[VarDef,zbExtVal,""]
+[VarDef,zbExtPos,0]
+[VarDef,zbExtEnd,0]
+[VarDef,zbExtFound,0]
+[VarDef,zbPipePos9,0]
+//0.7.0 - color texture rebind (hasTexture/textureFile via ext field)
+[VarDef,zbTexTitle,""]
+[VarDef,zbHasTexture,0]
+[VarDef,zbTexFile,""]
+[VarDef,zbTexPath,""]
+[VarDef,zbTexFound,0]
+[VarDef,zbTexCount,0]
+[VarDef,zbTexCheck,""]
+//0.7.10 - palette clear flag (1 = a texture was imported during this import run)
+[VarDef,zbTexImported,0]
+//0.8.0 - sculpt layer snapshot (Tool:Layers, selection-based addressing, duplicate-name safe)
+[VarDef,zbLayerCount,0]          // total layers of current subtool (0 = no Layers palette)
+[VarDef,zbLayerMem,"ZBLayerMem"] // layers.txt memory block (null-terminated records)
+[VarDef,zbLayerOffset,0]         // append cursor (cumulative across subtools)
+[VarDef,zbLayerBytes,0]
+[VarDef,zbLayerPath,""]          // current layer item path Tool:Layers:<name>
+[VarDef,zbLayerName,""]
+[VarDef,zbLayerInt,""]           // layer intensity as string
+[VarDef,zbLayerVis,0]            // visible flag (IModGet bit1)
+[VarDef,zbLayerRecFlag,0]        // recording flag (IModGet bit0)
+[VarDef,zbLayerMod,0]            // IModGet value
+[VarDef,zbLayerVisCur,0]         // runtime visible flag (IModGet bit1)
+[VarDef,zbLayerW,0]              // layer row width (IWidth) for eye IClick
+[VarDef,zbLayerH,0]
+[VarDef,zbLayerI,0]              // loop index (layer position)
+[VarDef,zbLayerJ,0]              // loop counter / navigation
+[VarDef,zbLayerRestOff,0]        // restore read cursor (separate from append cursor)
+[VarDef,zbLayerRec,""]           // record line
+[VarDef,zbLayGozPath,""]         // goz snapshot path
+[VarDef,zbLayFilePath,""]        // layers.txt path
+[VarDef,zbLPipe1,0]              // record parse positions
+[VarDef,zbLPipe2,0]
+[VarDef,zbLPipe3,0]
+[VarDef,zbLPipe4,0]
+[VarDef,zbLPipe5,0]
+//T4 导入侧图层还原
+[VarDef,zbLayerImpOk,0]
+[VarDef,zbLayerImpCount,0]
+[VarDef,zbLayerImpK,0]
+[VarDef,zbLayerFound,0]
+[VarDef,zbLayerStName,""]
+[VarDef,zbLayerMaxS,0]
+[VarDef,zbLayerBaseUsed,0]
+[VarDef,zbLayerDbg,0]
+[VarDef,zbLayerRecBit,0]
+[VarDef,zbLayerGone,0]
+//~~~ZFileUtils INLINE ROUTINES (direct string ops on embedded lib)~~~
+//These are inlined from ZFileUtilsInc.txt for portability.
+//dllPath must be set before calling any of these.
+[RoutineDef,ZFU_RenameSetNext,
+    [FileExecute,[Var,dllPath],RenameSetNext,str]
+,str]
+
+[RoutineDef,ZFU_RenameCurrentSubTool,
+    [If,([IExists,"Tool:SubTool:Rename"] && [IsEnabled,"Tool:SubTool:Rename"]),
+        [FileExecute,[Var,dllPath],RenameSetNext,str]
+        [IPress,"Tool:SubTool:Rename"]
+    ]
+,str]
+
+//~~~SYSTEM INFO ROUTINE~~~
+[RoutineDef,ZBGetSysInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+[If,isMac,[VarSet,zbPlatformStr,"Mac"]]
+]
+
+//~~~EXPORT ROUTINE~~~
+//Exports all SubTools (incl. folders) as GoZ files + extended manifest
+//Manifest record: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name|ext\0
+//ext: key=value; pairs (0.6.0 dyn attrs; 0.7.0 hasTexture/textureFile), empty for old exports
+//Folder detection: 0x400 (Closed) or 0x800 (Opened) bit set => isFolder=1
+//Visibility: subtoolEye=bit0 (subtool own eye), folderEye=bit1 (folder eye, folder heads only)
+//Folder state: isOpened=1 if 0x800 bit set, 0 if 0x400 bit set
+[RoutineDef,ZBRunExport,
+[RoutineCall,ZBGetSysInfo]
+[VarSet,zbToolName,[IGetTitle,Tool:Item Info]]
+[If,[StrLength,zbToolName] <= 0,
+[NoteIButton,"Close"]
+[Note,"No Tool loaded. Please load a Tool first.",,,4737096,,200]
+[Exit]
+]
+[VarSet,zbSubToolCount,[SubToolGetCount]]
+[If,zbSubToolCount <= 0,
+[NoteIButton,"Close"]
+[Note,"No SubTools found to export.",,,4737096,,200]
+[Exit]
+]
+[VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","export.goz","ZBridge Export - Choose location..."]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[VarSet,zbExportTempDir,[FileNameExtract,zbSavePath,1]]
+[VarSet,zbConfirmText,[StrMerge,"ZBridge Export\n\nTool: ",zbToolName,"\nSubTools: ",zbSubToolCount,"\n\nOutput Folder:\n",zbExportTempDir]]
+[NoteIButton,"Proceed"]
+[NoteIButton,"Cancel"]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,[Exit]]
+[VarSet,zbActiveST,[SubToolGetActiveIndex]]
+//0.5.0: duplicate subtool name check - abort before writing any files
+[RoutineCall,ZBRunDupCheck]
+[If,zbDupFound == 1,
+[SubToolSelect,zbActiveST]
+[Exit]
+]
+[VarSet,zbIdx,0]
+[VarSet,zbMeshIdx,0]
+[MemDelete,zbManMem]
+[MemCreate,zbManMem,32768]
+[VarSet,zbManOffset,0]
+[VarSet,zbManBytes,0]
+//0.8.0: 图层快照内存块（layers.txt 累积写入，跨子工具；仅含图层子工具时产出数据）
+[MemDelete,zbLayerMem]
+[MemCreate,zbLayerMem,16384]
+[VarSet,zbLayerOffset,0]
+[Loop,zbSubToolCount,
+[VarSet,zbStatus,[SubToolGetStatus,zbIdx]]
+//Folder detection: 0x400 (Closed) or 0x800 (Opened) bit set => isFolder=1
+//用嵌套If表达OR逻辑，避免不确定的布尔运算符
+[VarSet,zbIsFolder,0]
+[If,(zbStatus & 1024) == 1024,
+[VarSet,zbIsFolder,1]]
+[If,(zbStatus & 2048) == 2048,
+[VarSet,zbIsFolder,1]]
+[If,zbIsFolder == 1,
+[SubToolSelect,zbIdx]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbStName,[StrExtract,zbStName,0,[StrLength,zbStName]-2]]
+//文件夹条目：folderName=文件夹名（用于Import重建命名），name=子工具名（文件夹头名字）
+[VarSet,zbFolderName,[SubToolGetFolderName,zbIdx]]
+[VarSet,zbIsFolder,1]
+//Folder head: subtoolEye=bit0, folderEye=bit1, isOpened from 0x800
+[If,(zbStatus & 1) == 1,
+[VarSet,zbSubtoolEye,1]
+,
+[VarSet,zbSubtoolEye,0]
+]
+[If,(zbStatus & 2) == 2,
+[VarSet,zbFolderEye,1]
+,
+[VarSet,zbFolderEye,0]
+]
+[If,(zbStatus & 1024) == 1024,
+[VarSet,zbIsOpened,0]
+,
+[VarSet,zbIsOpened,1]
+]
+,
+[SubToolSelect,zbIdx]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbStName,[StrExtract,zbStName,0,[StrLength,zbStName]-2]]
+[VarSet,zbFolderName,[SubToolGetFolderName,zbIdx]]
+[VarSet,zbIsFolder,0]
+//Normal subtool: subtoolEye=bit0, folderEye always 0, isOpened always 0
+[If,(zbStatus & 1) == 1,
+[VarSet,zbSubtoolEye,1]
+,
+[VarSet,zbSubtoolEye,0]
+]
+[VarSet,zbFolderEye,0]
+[VarSet,zbIsOpened,0]
+]
+[VarSet,zbColorizeState,0]
+[VarSet,zbMaxSdiv,0]
+[VarSet,zbCurSdiv,0]
+//文件夹头也是网格，需要读取colorize/sdiv属性
+[VarSet,zbColorizeState,[IGet,Tool:Polypaint:Colorize]]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[VarSet,zbCurSdiv,[IGet,Tool:Geometry:SDiv]]
+[VarSet,zbMaxSdiv,[IGetMax,Tool:Geometry:SDiv]]
+[ISet,Tool:Geometry:SDiv,zbMaxSdiv]
+]
+]
+//0.6.0: 读取动态细分8属性->拼ext串->导出前临时关闭Dynamic预览（避免烘焙进GoZ几何）
+[RoutineCall,ZBRunDynRead]
+//0.7.0: 检测当前SubTool是否绑定颜色贴图（TextureMap标题非空）
+[RoutineCall,ZBRunTexDetect]
+[If,zbColorizeState == 0,
+[VarSet,zbPpFlag,"0"]
+,
+[VarSet,zbPpFlag,"1"]
+]
+[If,zbSubtoolEye == 1,
+[VarSet,zbSubEyeStr,"1"]
+,
+[VarSet,zbSubEyeStr,"0"]
+]
+[If,zbFolderEye == 1,
+[VarSet,zbFolEyeStr,"1"]
+,
+[VarSet,zbFolEyeStr,"0"]
+]
+[If,zbIsFolder == 1,
+[VarSet,zbFolStr,"1"]
+,
+[VarSet,zbFolStr,"0"]
+]
+[If,zbIsOpened == 1,
+[VarSet,zbOpenStr,"1"]
+,
+[VarSet,zbOpenStr,"0"]
+]
+[VarSet,zbFolNameStr,zbFolderName]
+//所有条目都导出GoZ（文件夹头本身也是网格模型）
+[VarSet,zbGozPath,[StrMerge,zbExportTempDir,"/",zbStName,".goz"]]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Export]
+//0.7.0: 导出后查找ZBrush自动生成的贴图文件（<goz名>_TXTR.tif），确认实际文件名
+[RoutineCall,ZBRunTexVerify]
+//0.7.0: 将贴图键（hasTexture/textureFile）追加进ext扩展字段
+[RoutineCall,ZBRunTexExtAppend]
+[VarSet,zbSdivStr,[Val,zbMaxSdiv]]
+[VarSet,zbCurSdivStr,[Val,zbCurSdiv]]
+//分步拼接避免超长StrMerge
+[VarSet,zbManLine,[StrMerge,zbPpFlag,"|",zbSdivStr,"|",zbCurSdivStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbSubEyeStr,"|",zbFolEyeStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbFolStr,"|",zbOpenStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbFolNameStr,"|",zbStName]]
+//0.6.0/0.7.0: 追加ext扩展字段（动态细分8属性+贴图键key=value;），旧版无ext则保持"name|"格式
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbExtStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,[StrFromAsc,0]]]
+[VarSet,zbManBytes,[MemWriteString,zbManMem,zbManLine,zbManOffset]]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[If,zbMaxSdiv > 0,
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+//0.6.0: 导出完成后恢复Dynamic预览开关（导出前若为开则重新打开）
+[RoutineCall,ZBRunDynRestorePreview]
+//0.8.0: 雕刻图层快照（含图层子工具：基准网格 + 逐层快照 + 写 layers.txt）
+//内部自行切回最高SDiv执行快照并在结束后恢复zbCurSdiv
+[RoutineCall,ZBRunLayerSnapshot]
+[VarInc,zbMeshIdx]
+[VarInc,zbIdx]
+]
+[MemResize,zbManMem,zbManOffset]
+[VarSet,zbManPath,[StrMerge,zbExportTempDir,"/zbridge_manifest.txt"]]
+[MemSaveToFile,zbManMem,zbManPath]
+[MemDelete,zbManMem]
+//0.8.0: 保存图层元数据 layers.txt（仅当本次导出含任意图层子工具）
+[If,zbLayerOffset > 0,
+[MemResize,zbLayerMem,zbLayerOffset]
+[VarSet,zbLayFilePath,[StrMerge,zbExportTempDir,"/layers.txt"]]
+[MemSaveToFile,zbLayerMem,zbLayFilePath]
+]
+[MemDelete,zbLayerMem]
+[SubToolSelect,zbActiveST]
+[VarSet,zbNoteText,[StrMerge,"Export Complete!\n\nTool: ",zbToolName,"\nTotal entries: ",zbSubToolCount,"\nMeshes exported: ",zbMeshIdx,"\n\nFolder:\n",zbExportTempDir]]
+[NoteIButton,"Close"]
+[Note,zbNoteText,,,4737096,,400]
+]
+
+//~~~DUPLICATE SUBTOOL NAME CHECK (pre-export)~~~
+//Collects all subtool names (same naming as manifest: IGetTitle minus last 2 chars)
+//and aborts export if any duplicates are found. Duplicate names would overwrite
+//each other's .goz files (goz named after subtool) and corrupt the import.
+//Comparison: equal length + StrFind==0 (prefix at position 0) => identical string.
+[RoutineDef,ZBRunDupCheck,
+[VarSet,zbDupFound,0]
+[VarSet,zbIdx,0]
+[MemDelete,zbDupMem]
+[MemCreate,zbDupMem,16384]
+[VarSet,zbDupOffset,0]
+//Pass 1: collect all names into memory block (null-terminated records)
+[Loop,zbSubToolCount,
+[SubToolSelect,zbIdx]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbStName,[StrExtract,zbStName,0,[StrLength,zbStName]-2]]
+[VarSet,zbDupBytes,[MemWriteString,zbDupMem,zbStName,zbDupOffset]]
+[VarSet,zbDupOffset,zbDupOffset + zbDupBytes]
+[VarInc,zbIdx]
+]
+//Pass 2: pairwise compare O(n^2) (acceptable for SubTool counts)
+[VarSet,zbDupCount,0]
+[VarSet,zbDupMsg,""]
+[VarSet,zbDupI,0]
+[VarSet,zbDupOffA,0]
+[Loop,zbSubToolCount-1,
+[VarSet,zbDupNameA,""]
+[MemReadString,zbDupMem,zbDupNameA,zbDupOffA]
+[VarSet,zbDupLenA,[StrLength,zbDupNameA]]
+[VarSet,zbDupOffB,zbDupOffA + zbDupLenA + 1]
+[VarSet,zbDupJ,zbDupI+1]
+[VarSet,zbDupIsNew,0]
+[Loop,zbSubToolCount-zbDupI-1,
+[VarSet,zbDupNameB,""]
+[MemReadString,zbDupMem,zbDupNameB,zbDupOffB]
+[VarSet,zbDupLenB,[StrLength,zbDupNameB]]
+[If,zbDupLenA == zbDupLenB,
+[If,[StrFind,zbDupNameB,zbDupNameA] == 0,
+[If,zbDupIsNew == 0,
+[VarSet,zbDupIsNew,1]
+[VarInc,zbDupCount]
+[If,zbDupCount == 1,
+[VarSet,zbDupMsg,zbDupNameA]
+,
+[VarSet,zbDupMsg,[StrMerge,zbDupMsg,"\n",zbDupNameA]]
+]
+]
+]
+]
+[VarSet,zbDupOffB,zbDupOffB + zbDupLenB + 1]
+[VarInc,zbDupJ]
+]
+[VarSet,zbDupOffA,zbDupOffA + zbDupLenA + 1]
+[VarInc,zbDupI]
+]
+[MemDelete,zbDupMem]
+//Abort export if duplicates found
+[If,zbDupCount > 0,
+[VarSet,zbDupFound,1]
+[VarSet,zbNoteText,[StrMerge,"Duplicate SubTool names detected (",zbDupCount,")!\n\nExport aborted.\n\nPlease rename the following SubTools in ZBrush, then export again:\n\n",zbDupMsg]]
+[NoteIButton,"Close"]
+//duration arg left empty: wait for user to click the button
+[Note,zbNoteText,,,4737096,,400]
+]
+]
+
+//~~~DYNAMIC SUBDIVISION PREVIEW ATTRIBUTES (0.6.0)~~~
+//8 attributes from the Tool:Geometry Dynamic Subdivision panel (s.* paths).
+//Export: read attrs -> build ext string (key=value;) -> temporarily turn the
+//        Dynamic preview OFF so the preview is not baked into the GoZ geometry
+//        -> restore it right after export.
+//Import: restore attrs AFTER the Subdivision (Reconstruct Subdiv) restore, so
+//        the rebuild cannot reset them. Every path is guarded by [IExists] for
+//        low-version ZBrush compatibility (missing paths are skipped silently;
+//        missing ext keys fall back to defaults 0/0.0).
+
+//Export side: read the 8 attrs + build ext string + turn preview off if ON
+[RoutineDef,ZBRunDynRead,
+[VarSet,dynActive,0]
+[If,[IExists,Tool:Geometry:s.Dynamic],[VarSet,dynActive,[IGet,Tool:Geometry:s.Dynamic]]]
+[VarSet,dynFlat,0]
+[If,[IExists,Tool:Geometry:s.FlatSubdiv],[VarSet,dynFlat,[IGet,Tool:Geometry:s.FlatSubdiv]]]
+[VarSet,dynSmooth,0]
+[If,[IExists,Tool:Geometry:s.SmoothSubdiv],[VarSet,dynSmooth,[IGet,Tool:Geometry:s.SmoothSubdiv]]]
+[VarSet,dynThick,0]
+[If,[IExists,Tool:Geometry:s.Thickness],[VarSet,dynThick,[IGet,Tool:Geometry:s.Thickness]]]
+[VarSet,dynSegs,0]
+[If,[IExists,Tool:Geometry:s.Segments],[VarSet,dynSegs,[IGet,Tool:Geometry:s.Segments]]]
+[VarSet,dynPost,0]
+[If,[IExists,Tool:Geometry:s.Post SubDiv],[VarSet,dynPost,[IGet,Tool:Geometry:s.Post SubDiv]]]
+[VarSet,dynOffset,0]
+[If,[IExists,Tool:Geometry:s.Offset],[VarSet,dynOffset,[IGet,Tool:Geometry:s.Offset]]]
+[VarSet,dynSmoothness,0]
+[If,[IExists,Tool:Geometry:s.Smoothness],[VarSet,dynSmoothness,[IGet,Tool:Geometry:s.Smoothness]]]
+//Build ext string, only for paths that exist (missing key = default on import)
+[VarSet,zbExtStr,""]
+[If,[IExists,Tool:Geometry:s.Dynamic],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynActive=",[Val,dynActive],";"]]]
+[If,[IExists,Tool:Geometry:s.FlatSubdiv],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynFlat=",[Val,dynFlat],";"]]]
+[If,[IExists,Tool:Geometry:s.SmoothSubdiv],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynSmooth=",[Val,dynSmooth],";"]]]
+[If,[IExists,Tool:Geometry:s.Thickness],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynThick=",[Val,dynThick],";"]]]
+[If,[IExists,Tool:Geometry:s.Segments],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynSegs=",[Val,dynSegs],";"]]]
+[If,[IExists,Tool:Geometry:s.Post SubDiv],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynPost=",[Val,dynPost],";"]]]
+[If,[IExists,Tool:Geometry:s.Offset],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynOffset=",[Val,dynOffset],";"]]]
+[If,[IExists,Tool:Geometry:s.Smoothness],[VarSet,zbExtStr,[StrMerge,zbExtStr,"dynSmoothness=",[Val,dynSmoothness],";"]]]
+//Turn Dynamic preview OFF before GoZ export (avoid baking preview into geometry)
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[IUnPress,Tool:Geometry:s.Dynamic]
+]
+]
+]
+
+//Export side: re-enable Dynamic preview after export (if it was ON before)
+[RoutineDef,ZBRunDynRestorePreview,
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[IPress,Tool:Geometry:s.Dynamic]
+]
+]
+]
+
+//Import side: find "zbExtKey=" inside zbExtStr, store value (up to ';') in zbExtVal
+[RoutineDef,ZBRunExtParse,
+[VarSet,zbExtFound,0]
+[If,[StrLength,zbExtStr] > 0,
+[VarSet,zbExtPos,[StrFind,zbExtKey,zbExtStr]]
+[If,zbExtPos >= 0,
+[VarSet,zbExtEnd,[StrFind,";",zbExtStr,zbExtPos+[StrLength,zbExtKey]]]
+[If,zbExtEnd >= 0,
+[VarSet,zbExtVal,[StrExtract,zbExtStr,zbExtPos+[StrLength,zbExtKey],zbExtEnd-1]]
+[VarSet,zbExtFound,1]
+]
+]
+]
+]
+
+//Import side: restore the 8 attrs from the ext field (zbPipePos9) of zbManLine
+[RoutineDef,ZBRunDynRestore,
+[VarSet,zbExtStr,""]
+[If,zbPipePos9 >= 0,
+[VarSet,zbExtStr,[StrExtract,zbManLine,zbPipePos9+1,[StrLength,zbManLine]-1]]
+]
+[If,[StrLength,zbExtStr] > 0,
+//Dynamic button first: enables the sliders so the following ISet calls take effect
+[VarSet,zbExtKey,"dynActive="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynActive,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[If,dynActive == 1,
+[IPress,Tool:Geometry:s.Dynamic]
+]
+]
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[If,dynActive == 0,
+[IUnPress,Tool:Geometry:s.Dynamic]
+]
+]
+]
+//FlatSubdiv
+[VarSet,zbExtKey,"dynFlat="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynFlat,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.FlatSubdiv],
+[ISet,Tool:Geometry:s.FlatSubdiv,dynFlat]
+]
+]
+//SmoothSubdiv
+[VarSet,zbExtKey,"dynSmooth="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynSmooth,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.SmoothSubdiv],
+[ISet,Tool:Geometry:s.SmoothSubdiv,dynSmooth]
+]
+]
+//Thickness
+[VarSet,zbExtKey,"dynThick="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynThick,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Thickness],
+[ISet,Tool:Geometry:s.Thickness,dynThick]
+]
+]
+//Segments
+[VarSet,zbExtKey,"dynSegs="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynSegs,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Segments],
+[ISet,Tool:Geometry:s.Segments,dynSegs]
+]
+]
+//Post SubDiv button
+[VarSet,zbExtKey,"dynPost="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynPost,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Post SubDiv],
+[If,dynPost == 1,
+[IPress,Tool:Geometry:s.Post SubDiv]
+]
+]
+[If,[IExists,Tool:Geometry:s.Post SubDiv],
+[If,dynPost == 0,
+[IUnPress,Tool:Geometry:s.Post SubDiv]
+]
+]
+]
+//Offset
+[VarSet,zbExtKey,"dynOffset="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynOffset,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Offset],
+[ISet,Tool:Geometry:s.Offset,dynOffset]
+]
+]
+//Smoothness
+[VarSet,zbExtKey,"dynSmoothness="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,dynSmoothness,[Val,zbExtVal]]
+[If,[IExists,Tool:Geometry:s.Smoothness],
+[ISet,Tool:Geometry:s.Smoothness,dynSmoothness]
+]
+]
+]
+]
+
+//~~~COLOR TEXTURE REBIND (0.7.0)~~~
+//GoZ does not embed image data - only a GoZ_TAG_TEXTURE_MAP_PATH string block.
+//The actual texture .tif is auto-written by ZBrush next to the .goz on export,
+//named <gozName>_TXTR.tif (GoZ workflow convention). ZScript cannot rename/move
+//files, so the file stays next to the goz and the actual name is recorded.
+//Export: ZBRunTexDetect (bound?) -> ZBRunTexVerify (find auto file, after export)
+//        -> ZBRunTexExtAppend (append hasTexture/textureFile to ext).
+//Import: ZBRunTexRestore - File:Texture:Import (verified button tooltip path),
+//wait for async import, select the new texture, flip it (Texture:Flpv in the
+//Texture palette), assign via TextureMap picker popup, force Texture On.
+//0.7.1 revision: Tool:Texture Map:Import popped "Error encountered while importing
+//a file" - Texture palette Import + Clone Txtr was used, but Clone Txtr did not bind.
+//0.7.2 revision: back to Tool:Texture Map:Import (still popped the error dialog).
+//0.7.3 revision: use File:Texture:Import (button tooltip path, user-verified, auto-
+//binds to the Tool slot); legacy Texture:Import kept as fallback for old versions.
+//0.7.4 revision: script-mode import does NOT auto-bind (manual mode does); Clone Txtr
+//is tool->palette so it cannot bind; Flip V is Texture:Flpv, not Tool:Texture Map.
+//Full flow documented in the routine comment above ZBRunTexRestore.
+
+//Export side: detect whether the current SubTool has a texture bound
+//(TextureMap title non-empty => bound). Also deletes any leftover texture file
+//from a previous export so the post-export FileExists check only reflects the
+//file written by THIS export.
+[RoutineDef,ZBRunTexDetect,
+[VarSet,zbHasTexture,0]
+[VarSet,zbTexTitle,""]
+[If,[IExists,Tool:Texture Map:TextureMap],
+[VarSet,zbTexTitle,[IGetTitle,Tool:Texture Map:TextureMap]]
+]
+[If,[StrLength,zbTexTitle] > 0,
+[VarSet,zbHasTexture,1]
+]
+[If,zbHasTexture == 1,
+[VarSet,zbTexPath,[StrMerge,zbExportTempDir,zbStName,"_TXTR.tif"]]
+[If,[FileExists,zbTexPath],
+[FileDelete,zbTexPath]
+]
+]
+]
+
+//Export side: after GoZ export, find the auto-generated texture file
+//Naming follows the GoZ workflow convention: <gozBaseName>_TXTR.tif
+//(the goz file is written as <subtoolName>.goz by ZBridge).
+[RoutineDef,ZBRunTexVerify,
+[VarSet,zbTexFound,0]
+[VarSet,zbTexFile,""]
+[If,zbHasTexture == 1,
+[VarSet,zbTexPath,[StrMerge,zbExportTempDir,zbStName,"_TXTR.tif"]]
+[If,[FileExists,zbTexPath],
+[VarSet,zbTexFound,1]
+[VarSet,zbTexFile,[StrMerge,zbStName,"_TXTR.tif"]]
+]
+]
+]
+
+//Export side: append hasTexture/textureFile keys to the ext string
+//(only when a texture file was actually found on disk)
+[RoutineDef,ZBRunTexExtAppend,
+[If,zbTexFound == 1,
+[VarSet,zbExtStr,[StrMerge,zbExtStr,"hasTexture=1;textureFile=",zbTexFile,";"]]
+]
+]
+
+//Import side: explicit texture rebind for subtools with hasTexture=1.
+//Called at the end of Phase 2 (after Dynamic restore). Texture On is forced to 1.
+//0.7.4 revision: File:Texture:Import imports the file into the Texture palette
+//(no error), but in script mode it does NOT auto-assign to the subtool (manual
+//mode does). Flip V lives in the Texture palette (Texture:Flpv), NOT in
+//Tool:Texture Map, so the old flip paths never existed. Clone Txtr is useless
+//here: per docs it copies tool->palette ("adds it to the Texture palette as the
+//active texture"), not palette->tool. Fix: wait for the async import, select the
+//new texture via Texture:Item Info, flip it (Texture:Flpv), then assign it to the
+//subtool through the TextureMap picker popup (IPress + IPress "PopUp:").
+//0.7.5 revision: PopUp click alone only sets the ACTIVE palette texture (user
+//observed the left-toolbar Texture got it, not the Tool map). Recorded ZScript
+//shows manual binding = [IPress,Texture:<name>] (press palette item, triggers
+//auto-apply) + [IPress,Tool:Texture Map:TextureMap]. Loop up to 3 attempts due
+//to the known ZBrush "first run does not take effect" quirk.
+[RoutineDef,ZBRunTexRestore,
+[VarSet,zbHasTexture,0]
+[VarSet,zbExtKey,"hasTexture="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[VarSet,zbHasTexture,[Val,zbExtVal]]
+]
+[If,zbHasTexture == 1,
+[VarSet,zbExtKey,"textureFile="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[If,[StrLength,zbExtVal] > 0,
+[VarSet,zbTexPath,[StrMerge,zbImportDir,zbExtVal]]
+[If,[FileExists,zbTexPath],
+//0.7.10: 进入导入流程即置位，供 Phase 2 结束后清理面板（仅当确实导入过贴图才清理）
+[VarSet,zbTexImported,1]
+//0.7.4: 导入前记录面板纹理数量（导入是异步的，需等待数量增加）
+[VarSet,zbTexCount,0]
+[If,[IExists,Texture:Item Info],
+[VarSet,zbTexCount,[IGetMax,Texture:Item Info]]
+]
+//1. 导入贴图到 Texture 面板（File:Texture:Import 实测有效；Texture:Import 兜底）
+[If,[IExists,File:Texture:Import],
+[FileNameSetNext,zbTexPath]
+[IPress,File:Texture:Import]
+,
+[If,[IExists,Texture:Import],
+[FileNameSetNext,zbTexPath]
+[IPress,Texture:Import]
+]
+]
+//2. 等待导入完成（防止异步导入尚未结束就操作）
+[If,[IExists,Texture:Item Info],
+[Loop,3000,
+[If,[IGetMax,Texture:Item Info] > zbTexCount,
+[LoopExit]
+]
+[Delay,0.1]
+]
+]
+//3. 选中刚导入的纹理（最后一个）并读取其标题用于拾取器匹配
+[VarSet,zbTexTitle,""]
+[If,[IExists,Texture:Current Texture],
+[ISet,Texture:Item Info,[IGetMax,Texture:Item Info]]
+[VarSet,zbTexTitle,[IGetTitle,Texture:Current Texture]]
+,
+[If,[IExists,Texture:Item Info],
+[ISet,Texture:Item Info,[IGetMax,Texture:Item Info]]
+[VarSet,zbTexTitle,[IGetTitle,Texture:Item Info]]
+[If,[StrLength,zbTexTitle] > 2,
+[VarSet,zbTexTitle,[StrExtract,zbTexTitle,0,[StrLength,zbTexTitle]-2]]
+]
+]
+]
+//4. 垂直翻转：Flip V 位于 Texture 面板，脚本路径 Texture:Flpv（录制实证）
+[If,[IExists,Texture:Flpv],
+[IPress,Texture:Flpv]
+,
+[If,[IExists,Texture:FlipV],
+[IPress,Texture:FlipV]
+,
+[If,[IExists,Texture:Flip Vertically],
+[IPress,Texture:Flip Vertically]
+]
+]
+]
+//5. 绑定到子工具（多机制组合，模拟录制脚本的手动选择）
+//0.7.5: 录制脚本显示手动绑定 = [IPress,Texture:<名>]（面板列表按下，触发自动贴到
+//子工具）+ [IPress,Tool:Texture Map:TextureMap]；拾取器 PopUp 点击作为补充。
+//循环最多 3 次尝试（ZBrush 已知怪癖：首次运行常不生效，第二次生效）。
+//0.7.6: 绑定前显式重选目标子工具（SubToolSelect,zbIdx），确保拾取器赋值落到正确
+//子工具（Tool 贴图槽是每子工具一份）；PopUp 点击改用 IClick（2015 官方规范：
+//工具贴图槽提交用 IClick），IPress 保留为兜底。
+//0.7.7: PopUp 操作前先 IExists 判空。实测：IClick 提交成功后拾取器随即关闭，紧随
+//其后的 IPress 会因 PopUp 项不存在报 "Interface item could not be found"（绑定
+//已生效但弹错）。分开判空：IClick 关闭拾取器后 → 第二个 IExists=0 → IPress 自动跳过。
+[SubToolSelect,zbIdx]
+[If,[StrLength,zbTexTitle] > 0,
+[If,[IExists,Tool:Texture Map:TextureMap],
+[VarSet,zbTexCheck,""]
+[Loop,3,
+[If,[StrLength,zbTexCheck] <= 0,
+[Delay,0.2]
+[IPress,[StrMerge,"Texture:",[Var,zbTexTitle]]]
+[IPress,Tool:Texture Map:TextureMap]
+[If,[IExists,[StrMerge,"PopUp:",[Var,zbTexTitle]]],
+[IClick,[StrMerge,"PopUp:",[Var,zbTexTitle]]]
+]
+[If,[IExists,[StrMerge,"PopUp:",[Var,zbTexTitle]]],
+[IPress,[StrMerge,"PopUp:",[Var,zbTexTitle]]]
+]
+[VarSet,zbTexCheck,""]
+[If,[IExists,Tool:Texture Map:TextureMap],
+[VarSet,zbTexCheck,[IGetTitle,Tool:Texture Map:TextureMap]]
+]
+]
+]
+]
+]
+//6. 确保 Texture On
+[If,[IExists,Tool:Texture Map:Texture On],
+[ISet,Tool:Texture Map:Texture On,1]
+]
+,
+[VarInc,zbImportErrors]
+]
+]
+]
+]
+]
+
+//~~~SCULPT LAYER SNAPSHOT (0.8.0)~~~
+//Tool:Layers 图层快照导出（方案B：平级命名 <stName>_LayerBase.goz / <stName>_Layer<i>.goz）
+//机制定案（probe4f/4h/4k 实测）:
+//  层数 = ISet(Layers Scrollbar,0,255) 后 IGetSecondary = N(0-based)，总层数 N+1；无 Layers 面板 => 0
+//  导航 = SelectUp x(总层数) 饱和到顶（计数法，重名免疫）；SelectDown x1 逐层下移（栈顶=位置0）
+//  当前层强度 = IGet/ISet(Tool:Layers:Layer Intensity)（选择式寻址，层间独立，重名免疫）
+//  层名 = IGetTitle(Layer Intensity)；full path = IGetTitle(...,1)（供 IModGet/IClick/IWidth/IHeight）
+//  可见性读 = IModGet bit1(值2)；写 = IClick(路径,W-5,H/2) 切换
+//  强度=0 自动关眼（ZBrush 强制）；强度>0 不会自动开眼 => 快照前必须先开目标层眼睛
+//layers.txt 记录: subtoolName|layerIndex|layerName|intensity|visible|enabled|vertexCount\0
+//  layerIndex 0=原始栈底层（导入按此顺序 New，重建后栈序一致）
+//  enabled/vertexCount 无 ZScript 读取途径，暂记 0 占位
+//每次导出循环前 zbLayerMem 已清空重建；zbLayerOffset 跨子工具累积
+//（与 manifest 相同的 null-terminated records 格式）
+
+//主控：检测 -> 记录 -> 导出 -> 恢复（无图层子工具整体跳过，行为零变化）
+[RoutineDef,ZBRunLayerSnapshot,
+[RoutineCall,ZBRunLayerDetect]
+[If,zbLayerCount > 0,
+[VarSet,zbLayerRestOff,zbLayerOffset]
+//主循环此刻已把 SDiv 恢复回 curSdiv；快照期间须保持在最高细分（顶点对齐）
+[If,zbMaxSdiv > 0,
+[ISet,Tool:Geometry:SDiv,zbMaxSdiv]
+]
+//快照期间临时关闭 Dynamic 预览（主循环已执行 DynRestorePreview，若原开则已重开；
+//不关闭会把 Dynamic 效果烘焙进快照，与主网格 <stName>.goz 的几何不对齐）
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[IUnPress,Tool:Geometry:s.Dynamic]
+]
+]
+[RoutineCall,ZBRunLayerBuildMem]
+[RoutineCall,ZBRunLayerDoExport]
+[RoutineCall,ZBRunLayerRestoreMem]
+//恢复 Dynamic 预览与 SDiv
+[If,dynActive == 1,
+[If,[IExists,Tool:Geometry:s.Dynamic],
+[IPress,Tool:Geometry:s.Dynamic]
+]
+]
+[If,zbMaxSdiv > 0,
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+]
+]
+
+//层数探测：无图层子工具整体跳过（zbLayerCount=0）
+//防护顺序定案：无图层时 Layer Intensity 滑杆为禁用态 => 先查 IsEnabled 再碰 Scrollbar
+//（空层列表上 ISet/IGetSecondary(Scrollbar) 属未定义行为，实测 idx=1 无图层子工具在此闪退）
+[RoutineDef,ZBRunLayerDetect,
+[VarSet,zbLayerCount,0]
+[If,[IExists,Tool:Layers:Layer Intensity],
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[If,[IExists,Tool:Layers:Layers Scrollbar],
+[ISet,Tool:Layers:Layers Scrollbar,0,255]
+[VarSet,zbLayerCount,[IGetSecondary,Tool:Layers:Layers Scrollbar]]
+[VarInc,zbLayerCount]
+//sanity clamp：空列表/异常值 => 0
+[If,zbLayerCount < 1,
+[VarSet,zbLayerCount,0]
+]
+]
+]
+]
+]
+
+//饱和到栈顶：SelectUp x(总层数) 必到顶（多按无害，重名免疫的计数法）
+[RoutineDef,ZBRunLayerToTop,
+[VarSet,zbLayerJ,0]
+[Loop,zbLayerCount,
+[IPress,Tool:Layers:SelectUp]
+[VarInc,zbLayerJ]
+]
+]
+
+//枚举记录：栈顶->栈底逐层，将 layers.txt 记录写入 zbLayerMem
+//（layerIndex = 总层数-1-栈位置，0=原始栈底层；记录顺序=栈顶->栈底）
+[RoutineDef,ZBRunLayerBuildMem,
+[RoutineCall,ZBRunLayerToTop]
+[VarSet,zbLayerI,0]
+[Loop,zbLayerCount,
+[VarSet,zbLayerPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbLayerName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbLayerInt,[IGet,Tool:Layers:Layer Intensity]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbLayerVis,0]
+[If,(zbLayerMod & 2) == 2,
+[VarSet,zbLayerVis,1]
+]
+[VarSet,zbLayerRec,[StrMerge,zbStName,"|",[Val,zbLayerCount-1-zbLayerI],"|",zbLayerName,"|",zbLayerInt,"|",[Val,zbLayerVis],"|0|0"]]
+[VarSet,zbLayerBytes,[MemWriteString,zbLayerMem,zbLayerRec,zbLayerOffset]]
+[VarSet,zbLayerOffset,zbLayerOffset + zbLayerBytes]
+[If,zbLayerI < zbLayerCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbLayerI]
+]
+]
+
+//快照导出：全部归零 -> 基准网格 -> 逐层(开眼+置1+导出+置0)
+[RoutineDef,ZBRunLayerDoExport,
+//1. 全部图层强度归零（从栈顶逐层置0；结束后停在栈底）
+[RoutineCall,ZBRunLayerToTop]
+[VarSet,zbLayerI,0]
+[Loop,zbLayerCount,
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbLayerI < zbLayerCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbLayerI]
+]
+//2. 导出基准网格（全部图层影响=0，导入侧以它为主网格，录制基准天然对齐）
+[VarSet,zbLayGozPath,[StrMerge,zbExportTempDir,"/",zbStName,"_LayerBase.goz"]]
+[FileNameSetNext,zbLayGozPath]
+[IPress,Tool:Export]
+//3. 逐层快照：当前在栈底(位置N)，向上步进；j=0..N => layerIndex=j => 栈位置 N-j
+[VarSet,zbLayerJ,0]
+[Loop,zbLayerCount,
+//先开眼（可见关阻断形变；强度>0 不会自动开眼，故开眼必须显式执行）
+[VarSet,zbLayerPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbLayerW,[IWidth,zbLayerPath]]
+[VarSet,zbLayerH,[IHeight,zbLayerPath]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbLayerVisCur,0]
+[If,(zbLayerMod & 2) == 2,
+[VarSet,zbLayerVisCur,1]
+]
+[If,zbLayerVisCur == 0,
+[IClick,zbLayerPath,zbLayerW-5,zbLayerH/2]
+]
+//置强度1 -> 导出快照 -> 置强度0（置0既防本层影响残留，也自动关眼）
+[ISet,Tool:Layers:Layer Intensity,1]
+[VarSet,zbLayGozPath,[StrMerge,zbExportTempDir,"/",zbStName,"_Layer",[Val,zbLayerJ],".goz"]]
+[FileNameSetNext,zbLayGozPath]
+[IPress,Tool:Export]
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbLayerJ < zbLayerCount-1,
+[IPress,Tool:Layers:SelectUp]
+]
+[VarInc,zbLayerJ]
+]
+]
+
+//状态恢复：从 zbLayerMem 读回本子工具记录，逐层恢复原强度+原可见性
+//（快照后当前层=栈顶；第k条记录=栈位置k，逐层 SelectDown x1 即可）
+[RoutineDef,ZBRunLayerRestoreMem,
+[VarSet,zbLayerJ,0]
+[Loop,zbLayerCount,
+[VarSet,zbLayerRec,""]
+[MemReadString,zbLayerMem,zbLayerRec,zbLayerRestOff]
+[If,[StrLength,zbLayerRec] <= 0,
+[LoopExit]
+]
+[VarSet,zbLayerBytes,[StrLength,zbLayerRec]]
+[VarSet,zbLayerRestOff,zbLayerRestOff + zbLayerBytes + 1]
+//解析: <subtoolName>|<layerIndex>|<name>|<intensity>|<visible>|<enabled>|<vertexCount>
+//StrExtract 第三参数=终点索引（含），与 ZBRunManParse 已验证模式一致
+[VarSet,zbLPipe1,[StrFind,"|",zbLayerRec,0]]
+[VarSet,zbLPipe2,[StrFind,"|",zbLayerRec,zbLPipe1+1]]
+[VarSet,zbLPipe3,[StrFind,"|",zbLayerRec,zbLPipe2+1]]
+[VarSet,zbLPipe4,[StrFind,"|",zbLayerRec,zbLPipe3+1]]
+[VarSet,zbLPipe5,[StrFind,"|",zbLayerRec,zbLPipe4+1]]
+[VarSet,zbLayerInt,[StrExtract,zbLayerRec,zbLPipe3+1,zbLPipe4-1]]
+[VarSet,zbLayerVis,[Val,[StrExtract,zbLayerRec,zbLPipe4+1,zbLPipe5-1]]]
+[If,zbLayerJ > 0,
+[IPress,Tool:Layers:SelectDown]
+]
+//先恢复强度（强度=0 自动关眼；强度>0 不会自动开眼）
+[ISet,Tool:Layers:Layer Intensity,zbLayerInt]
+//再恢复可见性（仅期望开且当前关 -> IClick 一次；期望关时恒无需操作）
+[VarSet,zbLayerPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbLayerW,[IWidth,zbLayerPath]]
+[VarSet,zbLayerH,[IHeight,zbLayerPath]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbLayerVisCur,0]
+[If,(zbLayerMod & 2) == 2,
+[VarSet,zbLayerVisCur,1]
+]
+[If,zbLayerVis == 1,
+[If,zbLayerVisCur == 0,
+[IClick,zbLayerPath,zbLayerW-5,zbLayerH/2]
+]
+]
+[VarInc,zbLayerJ]
+]
+]
+
+//~~~T4 IMPORT: LAYER RESTORE~~~
+//顺序定案（不可调换）：Phase 2 细分还原 -> 切最高SDiv -> 逐层录制导入 -> 切回原显示SDiv
+//录制导入只动顶点不动基网格，细分历史保留，无需重跑 Reconstruct
+
+//加载 layers.txt 到 zbLayerMem（不存在则 zbLayerImpOk=0，全程行为与旧版一致）
+[RoutineDef,ZBRunLayerImpLoad,
+[VarSet,zbLayerImpOk,0]
+[VarSet,zbLayGozPath,[StrMerge,zbImportDir,"layers.txt"]]
+[If,[FileExists,zbLayGozPath],
+[MemDelete,zbLayerMem]
+[MemCreateFromFile,zbLayerMem,zbLayGozPath]
+[VarSet,zbLayerImpOk,1]
+]
+[Note,[StrMerge,"DBG-I1: impOk=",zbLayerImpOk," p=",zbLayGozPath],2]
+]
+
+//统计当前子工具(zbStName)的记录数 -> zbLayerImpCount
+[RoutineDef,ZBRunLayerImpMatch,
+[VarSet,zbLayerImpCount,0]
+[VarSet,zbLayerRestOff,0]
+[Loop,256,
+[VarSet,zbLayerRec,""]
+[MemReadString,zbLayerMem,zbLayerRec,zbLayerRestOff]
+[If,[StrLength,zbLayerRec] <= 0,
+[LoopExit]
+]
+[VarSet,zbLayerBytes,[StrLength,zbLayerRec]]
+[VarSet,zbLayerRestOff,zbLayerRestOff + zbLayerBytes + 1]
+[VarSet,zbLPipe1,[StrFind,"|",zbLayerRec,0]]
+[If,zbLPipe1 > 0,
+[VarSet,zbLayerStName,[StrExtract,zbLayerRec,0,zbLPipe1-1]]
+[VarSet,zbLayerW,[StrLength,zbLayerStName]]
+[VarSet,zbLayerH,[StrLength,zbStName]]
+[If,zbLayerW == zbLayerH,
+[If,[StrFind,zbLayerStName,zbStName,0] == 0,
+[VarInc,zbLayerImpCount]
+]
+]
+]
+]
+]
+
+//按 (zbStName, layerIndex=zbLayerImpK) 定位记录，解析 name/intensity/visible
+//zbLayerFound=1 时 zbLayerName/zbLayerInt/zbLayerVis 有效；未找到=0
+//（用 zbLayerI 做解析暂存，不碰 zbLayerJ —— 最终 pass 的循环变量）
+[RoutineDef,ZBRunLayerImpRec,
+[VarSet,zbLayerFound,0]
+[VarSet,zbLayerRestOff,0]
+[Loop,256,
+[VarSet,zbLayerRec,""]
+[MemReadString,zbLayerMem,zbLayerRec,zbLayerRestOff]
+[If,[StrLength,zbLayerRec] <= 0,
+[LoopExit]
+]
+[VarSet,zbLayerBytes,[StrLength,zbLayerRec]]
+[VarSet,zbLayerRestOff,zbLayerRestOff + zbLayerBytes + 1]
+[VarSet,zbLPipe1,[StrFind,"|",zbLayerRec,0]]
+[If,zbLPipe1 > 0,
+[VarSet,zbLayerStName,[StrExtract,zbLayerRec,0,zbLPipe1-1]]
+[VarSet,zbLayerW,[StrLength,zbLayerStName]]
+[VarSet,zbLayerH,[StrLength,zbStName]]
+[If,zbLayerW == zbLayerH,
+[If,[StrFind,zbLayerStName,zbStName,0] == 0,
+[VarSet,zbLPipe2,[StrFind,"|",zbLayerRec,zbLPipe1+1]]
+[VarSet,zbLayerI,[Val,[StrExtract,zbLayerRec,zbLPipe1+1,zbLPipe2-1]]]
+[If,zbLayerI == zbLayerImpK,
+[VarSet,zbLPipe3,[StrFind,"|",zbLayerRec,zbLPipe2+1]]
+[VarSet,zbLPipe4,[StrFind,"|",zbLayerRec,zbLPipe3+1]]
+[VarSet,zbLPipe5,[StrFind,"|",zbLayerRec,zbLPipe4+1]]
+[VarSet,zbLayerName,[StrExtract,zbLayerRec,zbLPipe2+1,zbLPipe3-1]]
+[VarSet,zbLayerInt,[StrExtract,zbLayerRec,zbLPipe3+1,zbLPipe4-1]]
+[VarSet,zbLayerVis,[Val,[StrExtract,zbLayerRec,zbLPipe4+1,zbLPipe5-1]]]
+[VarSet,zbLayerFound,1]
+[LoopExit]
+]
+]
+]
+]
+]
+]
+
+//主流程：逐层 归零->New(录制)->导入快照->退录制->命名，最后恢复强度+可见性
+//调用时机：Phase 2 内 ZBRunTexRestore 之后（当前子工具=zbIdx，zbStName/zbCurSdiv 有效）
+[RoutineDef,ZBRunLayerRestoreImport,
+[If,zbLayerImpOk == 1,
+[RoutineCall,ZBRunLayerImpMatch]
+[Note,[StrMerge,"DBG-I2: ",zbStName," cnt=",zbLayerImpCount],2]
+[If,zbLayerImpCount > 0,
+//1. 切到最高细分级别（快照均在最高SDiv导出，顶点一一对齐）
+[VarSet,zbLayerMaxS,0]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[VarSet,zbLayerMaxS,[IGetMax,Tool:Geometry:SDiv]]
+[If,zbLayerMaxS > 0,
+[ISet,Tool:Geometry:SDiv,zbLayerMaxS]
+]
+]
+]
+//2. 按 layerIndex 升序建层（0=栈底先建；New 总插栈顶）
+[VarSet,zbLayerCount,0]
+[VarSet,zbLayerImpK,0]
+[Loop,zbLayerImpCount,
+[RoutineCall,ZBRunLayerImpRec]
+[Note,[StrMerge,"DBG-I3: k=",zbLayerImpK," f=",zbLayerFound],2]
+[If,zbLayerFound == 1,
+[VarSet,zbLayGozPath,[StrMerge,zbImportDir,zbStName,"_Layer",[Val,zbLayerImpK],".goz"]]
+[If,[FileExists,zbLayGozPath],
+//已有层全部归零（网格=Base => delta=纯层形变）
+[If,zbLayerCount > 0,
+[RoutineCall,ZBRunLayerToTop]
+[VarSet,zbLayerI,0]
+[Loop,zbLayerCount,
+[ISet,Tool:Layers:Layer Intensity,0]
+[If,zbLayerI < zbLayerCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbLayerI]
+]
+]
+//新建层（自动进录制态）-> Detect 验证层数真增加（未建成=New no-op，跳过导入保基准网格）
+[IPress,Tool:Layers:New]
+[VarSet,zbLayerDbg,zbLayerCount]
+[RoutineCall,ZBRunLayerDetect]
+[Note,[StrMerge,"DBG-I3b: k=",zbLayerImpK," before=",zbLayerDbg," after=",zbLayerCount],2]
+[If,zbLayerCount == zbLayerDbg+1,
+[VarSet,zbLayerRecBit,0]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[If,(zbLayerMod & 1) == 1,
+[VarSet,zbLayerRecBit,1]
+]
+]
+[Note,[StrMerge,"DBG-I3d: k=",zbLayerImpK," rec=",zbLayerRecBit],2]
+[If,zbLayerRecBit == 1,
+[FileNameSetNext,zbLayGozPath]
+[IPress,Tool:Import]
+[Note,[StrMerge,"DBG-I3c: k=",zbLayerImpK," li=",[IsEnabled,Tool:Layers:Layer Intensity]],2]
+//层存活检测：Import 走替换路径会清空图层 -> 恢复计数防空列表操作
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLayerGone,0]
+,
+[VarSet,zbLayerGone,1]
+[VarSet,zbLayerCount,zbLayerDbg]
+[VarInc,zbImportErrors]
+]
+[If,zbLayerGone == 0,
+//退录制：bit0 确认录制态才点击（此时层名为默认名唯一，拼路径安全）
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[If,(zbLayerMod & 1) == 1,
+[VarSet,zbLayerW,[IWidth,zbLayerPath]]
+[VarSet,zbLayerH,[IHeight,zbLayerPath]]
+[IClick,zbLayerPath,zbLayerW-25,zbLayerH/2]
+]
+[Note,[StrMerge,"DBG-I4: k=",zbLayerImpK," mod=",zbLayerMod],2]
+//命名（ZFU；任何环节失败降级跳过，不影响形变还原）
+[If,[StrLength,zbLayerName] > 0,
+[If,[StrLength,dllPath] > 0,
+[If,[IExists,Tool:Layers:Rename],
+[If,[IsEnabled,Tool:Layers:Rename],
+[RoutineCall,ZFU_RenameSetNext,zbLayerName]
+[IPress,Tool:Layers:Rename]
+]
+]
+]
+]
+,
+[VarInc,zbImportErrors]
+]
+,
+[VarSet,zbLayerCount,zbLayerDbg]
+[VarInc,zbImportErrors]
+]
+,
+[VarSet,zbLayerCount,zbLayerDbg]
+[VarInc,zbImportErrors]
+]
+,
+[VarInc,zbImportErrors]
+]
+,
+[VarInc,zbImportErrors]
+]
+[VarInc,zbLayerImpK]
+]
+//3. 最终 pass：恢复每层强度+可见性（当前选中=栈顶；位置j -> layerIndex=count-1-j）
+[If,zbLayerCount > 0,
+[VarSet,zbLayerJ,0]
+[Loop,zbLayerCount,
+[VarSet,zbLayerImpK,[Val,zbLayerCount-1-zbLayerJ]]
+[RoutineCall,ZBRunLayerImpRec]
+[If,zbLayerFound == 1,
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[ISet,Tool:Layers:Layer Intensity,zbLayerInt]
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbLayerVisCur,0]
+[If,(zbLayerMod & 2) == 2,
+[VarSet,zbLayerVisCur,1]
+]
+//双向恢复：期望与当前不一致才点击（强度=0 已自动关眼，通常无需点击）
+[If,zbLayerVis != zbLayerVisCur,
+[VarSet,zbLayerW,[IWidth,zbLayerPath]]
+[VarSet,zbLayerH,[IHeight,zbLayerPath]]
+[IClick,zbLayerPath,zbLayerW-5,zbLayerH/2]
+]
+]
+]
+[If,zbLayerJ < zbLayerCount-1,
+[IPress,Tool:Layers:SelectDown]
+]
+[VarInc,zbLayerJ]
+]
+]
+//4. 切回原显示细分级别
+[If,zbLayerMaxS > 0,
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+]
+]
+]
+]
+]
+
+//~~~MANIFEST PARSE ROUTINE (shared by import phases)~~~
+//Parses all 9 pipe positions from zbManLine into global zbPipePos1-9
+//Format: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name|ext
+//zbPipePos9 = -1 for old manifests without the ext field (backward compatible)
+[RoutineDef,ZBRunManParse,
+    [VarSet,zbPipePos1,[StrFind,"|",zbManLine]]
+    [VarSet,zbPipePos2,[StrFind,"|",zbManLine,zbPipePos1+1]]
+    [VarSet,zbPipePos3,[StrFind,"|",zbManLine,zbPipePos2+1]]
+    [VarSet,zbPipePos4,[StrFind,"|",zbManLine,zbPipePos3+1]]
+    [VarSet,zbPipePos5,[StrFind,"|",zbManLine,zbPipePos4+1]]
+    [VarSet,zbPipePos6,[StrFind,"|",zbManLine,zbPipePos5+1]]
+    [VarSet,zbPipePos7,[StrFind,"|",zbManLine,zbPipePos6+1]]
+    [VarSet,zbPipePos8,[StrFind,"|",zbManLine,zbPipePos7+1]]
+    [VarSet,zbPipePos9,[StrFind,"|",zbManLine,zbPipePos8+1]]
+]
+
+//~~~IMPORT ROUTINE~~~
+//Imports Mesh_N.goz as flat SubTools + restores name/colorize/sdiv from manifest
+//Folder entries (isFolder=1) are skipped in phase 1; visibility/folders restored in phases 2-3
+[RoutineDef,ZBRunImport,
+[RoutineCall,ZBGetSysInfo]
+//Load ZFileUtils DLL for folder renaming
+[VarSet,dllPath,""]
+[If,[ZBrushInfo,16]==64,
+    [If,isMac,
+        [VarSet,dllPath,"ZBridgeData/ZFileUtils.lib"]
+    ,
+        [VarSet,dllPath,"ZBridgeData/ZFileUtils64.dll"]
+    ]
+]
+[VarSet,zbInputFile,[FileNameAsk,"GoZ(*.goz)|*.goz||",,"Select a GoZ file from ZBridge export..."]]
+[If,[StrLength,zbInputFile] <= 0,[Exit]]
+[VarSet,zbImportDir,[FileNameExtract,zbInputFile,1]]
+//Read manifest and count entries
+[VarSet,zbManPath,[StrMerge,zbImportDir,"zbridge_manifest.txt"]]
+[If,[FileExists,zbManPath],
+,
+[NoteIButton,"Close"]
+[Note,[StrMerge,"Manifest not found:\n",zbManPath],,,4737096,,350]
+[Exit]
+]
+[MemDelete,zbManMem]
+[MemCreateFromFile,zbManMem,zbManPath]
+[VarSet,zbGozCount,0]
+[VarSet,zbManOffset,0]
+[Loop,256,
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[If,[StrLength,zbManLine] <= 0,
+[LoopExit]
+]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[VarInc,zbGozCount]
+]
+[If,zbGozCount <= 0,
+[NoteIButton,"Close"]
+[Note,"Manifest is empty",,,4737096,,200]
+[MemDelete,zbManMem]
+[Exit]
+]
+//Confirm import
+[VarSet,zbConfirmText,[StrMerge,"ZBridge Import\n\nEntries in manifest: ",zbGozCount,"\nSource: ",zbInputFile,"\n\nImports SubTools with folder structure restoration."]]
+[NoteIButton,"Import"]
+[NoteIButton,"Cancel"]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,
+[MemDelete,zbManMem]
+[Exit]
+]
+//0.8.0 T4: 加载 layers.txt（不存在则内部 zbLayerImpOk=0，后续图层逻辑全程跳过）
+[RoutineCall,ZBRunLayerImpLoad]
+//Phase 1: Import GoZ files as flat SubTools
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+[VarSet,zbImportErrors,0]
+[VarSet,zbMainToolID,0]
+[VarDef,zbLastIdx,0]
+[VarDef,zbNewIdx,0]
+[Loop,zbGozCount,
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[RoutineCall,ZBRunManParse]
+//0.6.0: name is followed by the ext field -> stop at zbPipePos9 when present
+[If,zbPipePos9 >= 0,
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,zbPipePos9-1]]
+,
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,[StrLength,zbManLine]-1]]
+]
+[VarSet,zbGozFile,[StrMerge,zbImportDir,zbStName,".goz"]]
+//0.8.0 T4: 本子工具有图层记录且 _LayerBase.goz 存在 -> 改导基准网格（录制基准对齐）
+[VarSet,zbLayerBaseUsed,0]
+[If,zbLayerImpOk == 1,
+[RoutineCall,ZBRunLayerImpMatch]
+[If,zbLayerImpCount > 0,
+[VarSet,zbLayGozPath,[StrMerge,zbImportDir,zbStName,"_LayerBase.goz"]]
+[If,[FileExists,zbLayGozPath],
+[VarSet,zbGozFile,zbLayGozPath]
+[VarSet,zbLayerBaseUsed,1]
+]
+]
+]
+[If,[FileExists,zbGozFile],
+[If,zbIdx == 0,
+[FileNameSetNext,zbGozFile]
+[IPress,Tool:Import]
+[VarSet,zbMainToolID,[IGet,Tool:Item Info]]
+,
+[ISet,Tool:Item Info,zbMainToolID]
+[VarSet,zbLastIdx,[SubToolGetCount] - 1]
+[SubToolSelect,zbLastIdx]
+[IPress,Tool:SubTool:Duplicate]
+[VarSet,zbNewIdx,[SubToolGetCount] - 1]
+[SubToolSelect,zbNewIdx]
+[FileNameSetNext,zbGozFile]
+[IPress,Tool:Import]
+]
+,
+[VarInc,zbImportErrors]
+]
+//0.8.0 T4: _LayerBase.goz 导入后 Tool/子工具名带 _LayerBase 后缀 -> 改回 manifest 名（ZFU，失败降级仅残留后缀）
+[If,zbLayerBaseUsed == 1,
+[If,[StrLength,dllPath] > 0,
+[RoutineCall,ZFU_RenameCurrentSubTool,zbStName]
+]
+]
+[VarInc,zbIdx]
+]
+//Phase 2: Restore colorize, SubDiv, visibility from manifest
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+//0.7.10: 重置贴图导入标志（ZBRunTexRestore 内置 1，循环结束统一清理面板用）
+[VarSet,zbTexImported,0]
+[Loop,zbGozCount,
+[SubToolSelect,zbIdx]
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[RoutineCall,ZBRunManParse]
+//Parse property fields
+[VarSet,zbPpFlag,[StrExtract,zbManLine,0,zbPipePos1-1]]
+[VarSet,zbSdivFlag,[StrExtract,zbManLine,zbPipePos1+1,zbPipePos2-1]]
+[VarSet,zbCurSdivStr,[StrExtract,zbManLine,zbPipePos2+1,zbPipePos3-1]]
+[VarSet,zbCurSdiv,[Val,zbCurSdivStr]]
+[VarSet,zbSubEyeStr,[StrExtract,zbManLine,zbPipePos3+1,zbPipePos4-1]]
+[VarSet,zbFolEyeStr,[StrExtract,zbManLine,zbPipePos4+1,zbPipePos5-1]]
+[VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+//Restore Colorize
+[If,[IExists,Tool:Polypaint:Colorize],
+[If,[Val,zbPpFlag] == 1,
+[ISet,Tool:Polypaint:Colorize,1]
+,
+[ISet,Tool:Polypaint:Colorize,0]
+]
+]
+//Restore SubDiv
+[If,zbSdivFlag == 0,
+,
+[If,[IExists,Tool:Geometry:Reconstruct Subdiv],
+[VarSet,zbMaxSdiv,[Val,zbSdivFlag]]
+[VarSet,zbMaxSdiv,zbMaxSdiv - 1]
+[If,zbMaxSdiv > 0,
+[VarSet,zbTempName,0]
+[Loop,zbMaxSdiv,
+[If,[IsEnabled,Tool:Geometry:Reconstruct Subdiv],
+[IPress,Tool:Geometry:Reconstruct Subdiv]
+,
+[LoopExit]
+]
+[VarInc,zbTempName]
+]
+]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+]
+]
+]
+//Restore Visibility
+//Folders: effective visibility = folderEye (bit1)
+//Normal subtools: effective visibility = subtoolEye (bit0)
+[VarSet,zbStatus,[SubToolGetStatus,zbIdx]]
+[If,[Val,zbFolStr] == 1,
+    [If,[Val,zbFolEyeStr] == 1,
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+    ,
+        [If,(zbStatus & 1) == 1,
+            [VarSet,zbStatus,zbStatus - 1]
+        ]
+    ]
+,
+    [If,[Val,zbSubEyeStr] == 1,
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+    ,
+        [If,(zbStatus & 1) == 1,
+            [VarSet,zbStatus,zbStatus - 1]
+        ]
+    ]
+]
+[SubToolSetStatus,zbIdx,zbStatus]
+//0.6.0: 动态细分8属性恢复（必须在SubDiv恢复之后，避免被Reconstruct Subdiv重置）
+[RoutineCall,ZBRunDynRestore]
+//0.7.0: 颜色贴图显式重绑（Phase 2 末尾，紧接动态细分恢复之后）
+[RoutineCall,ZBRunTexRestore]
+//0.8.0 T4: Phase 2 循环本身不设置 zbStName（残留=Phase 1 末条记录），必须现解析
+[If,zbPipePos9 >= 0,
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,zbPipePos9-1]]
+,
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,[StrLength,zbManLine]-1]]
+]
+//0.8.0 T4: 图层还原（顺序定案：细分已还原 -> 切最高SDiv -> 录制导入 -> 切回zbCurSdiv）
+[RoutineCall,ZBRunLayerRestoreImport]
+[VarInc,zbIdx]
+]
+//0.7.10: 所有贴图载入完成后，将 Texture 面板当前纹理置空（用户诉求：左侧面板不残留贴图）。
+//说明：0.7.8 的失败根因是移除 ISet 导致绑定静默跳过（zbTexTitle 空），Remove 本身对
+//Tool 槽绑定的影响尚未单独验证；本版保留 ISet，单独验证 Remove：
+//若 Tool 槽绑定保持 → 方案成立；若绑定丢失 → 放弃本方案，转 marcus 直接导入法（远期）。
+[If,zbTexImported == 1,
+[If,[IExists,Texture:Remove],
+[IPress,Texture:Remove]
+]
+]
+//Phase 3: Rebuild folder structure (New Folder + MoveUp)
+[VarDef,zbFolManIdx,0]
+[VarDef,zbFolEyeVal,0]
+[VarDef,zbFolOpenVal,0]
+[VarDef,zbSubEyeVal,0]
+[VarDef,zbFolCursor,0]
+[VarDef,zbContentCnt,0]
+[VarDef,zbContOff,0]
+//Count folders in manifest
+[VarSet,zbFolderTotal,0]
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+[Loop,zbGozCount,
+    [VarSet,zbManLine,""]
+    [MemReadString,zbManMem,zbManLine,zbManOffset]
+    [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+    [RoutineCall,ZBRunManParse]
+    [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+    [If,[Val,zbFolStr]==1,
+        [VarInc,zbFolderTotal]
+    ]
+    [VarSet,zbManOffset,zbManOffset+zbManBytes]
+    [VarInc,zbIdx]
+]
+//Process folders bottom-to-top
+[If,zbFolderTotal > 0,
+    [VarSet,zbFolCursor,zbFolderTotal]
+    [Loop,zbFolderTotal,
+        [VarDec,zbFolCursor]
+        //Find this folder's entry in manifest
+        [VarSet,zbManOffset,0]
+        [VarSet,zbIdx,0]
+        [VarSet,zbContOff,0]
+        [Loop,zbGozCount,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [RoutineCall,ZBRunManParse]
+            [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+            [If,[Val,zbFolStr]==1,
+                [If,zbContOff==zbFolCursor,
+                    [VarSet,zbFolManIdx,zbIdx]
+                    [VarSet,zbSubEyeVal,[Val,[StrExtract,zbManLine,zbPipePos3+1,zbPipePos4-1]]]
+                    [VarSet,zbFolEyeVal,[Val,[StrExtract,zbManLine,zbPipePos4+1,zbPipePos5-1]]]
+                    [VarSet,zbFolOpenVal,[Val,[StrExtract,zbManLine,zbPipePos6+1,zbPipePos7-1]]]
+                    [VarSet,zbFolName,[StrExtract,zbManLine,zbPipePos7+1,zbPipePos8-1]]
+                    [LoopExit]
+                ]
+                [VarInc,zbContOff]
+            ]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+            [VarInc,zbIdx]
+        ]
+        //Current subtool index = manifest index (bottom-to-top: no shift from folders above)
+        [VarSet,zbCurSubIdx,zbFolManIdx]
+        //Count content subtools (scan forward until next folder or end)
+        [VarSet,zbContentCnt,0]
+        [VarSet,zbManOffset,0]
+        [VarSet,zbIdx,0]
+        [Loop,zbFolManIdx+1,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+            [VarInc,zbIdx]
+        ]
+        [Loop,zbGozCount-zbFolManIdx-1,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [RoutineCall,ZBRunManParse]
+            [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+            [If,[Val,zbFolStr]==1,
+                [LoopExit]
+            ]
+            //Check zbFolNameStr: consecutive pipes (empty field) = standalone subtool → stop
+            [If,zbPipePos8 - zbPipePos7 == 1,
+                [LoopExit]
+            ]
+            [VarInc,zbContentCnt]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+        ]
+        //Create folder (wraps selected subtool with pre-set name)
+        [SubToolSelect,zbCurSubIdx]
+        //Pre-set folder name to avoid rename dialog
+        [If,[StrLength,dllPath] > 0,
+            [If,[FileExists,dllPath],
+                [If,[StrLength,zbFolName] > 0,
+                    [FileExecute,[Var,dllPath],RenameSetNext,zbFolName]
+                ]
+            ]
+        ]
+        [IPress,Tool:SubTool:New Folder]
+        //MoveUp content subtools into folder
+        [If,zbContentCnt > 0,
+            [SubToolSelect,zbCurSubIdx+1]
+            [Loop,zbContentCnt,
+                [IPress,Tool:SubTool:MoveUp]
+                [IPress,Tool:SubTool:SelectDown]
+            ]
+        ]
+        //Set folder state AFTER New Folder and MoveUp
+        //Use If+arithmetic instead of bitwise |/& for reliability
+        [SubToolSelect,zbCurSubIdx]
+        [VarSet,zbStatus,[SubToolGetStatus,zbCurSubIdx]]
+        //bit0 = 1 (container visible)
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+        //bit10 = 0 (clear ClosedFolder for temporary)
+        [If,(zbStatus & 1024) == 1024,
+            [VarSet,zbStatus,zbStatus - 1024]
+        ]
+        //bit1 = zbFolEyeVal (folder eye visibility)
+        [If,zbFolEyeVal == 1,
+            [If,(zbStatus & 2) == 0,
+                [VarSet,zbStatus,zbStatus + 2]
+            ]
+        ,
+            [If,(zbStatus & 2) == 2,
+                [VarSet,zbStatus,zbStatus - 2]
+            ]
+        ]
+        //bit10 = 1024 if folder should be closed
+        [If,zbFolOpenVal != 1,
+            [If,(zbStatus & 1024) == 0,
+                [VarSet,zbStatus,zbStatus + 1024]
+            ]
+        ]
+        [SubToolSetStatus,zbCurSubIdx,zbStatus]
+    ]
+]
+[MemDelete,zbManMem]
+[MemDelete,zbLayerMem]
+[VarSet,zbNoteText,[StrMerge,"Import Complete!\n\nEntries processed: ",zbGozCount,"\nErrors: ",zbImportErrors]]
+[NoteIButton,"Close"]
+[Note,zbNoteText,,,4737096,,300]
+]
+
+//~~~USER INTERFACE~~~
+[ISubPalette,"ZPlugin:ZBridge"]
+
+[IButton,"ZPlugin:ZBridge:Export",
+    "Export the current Tool with all SubTools to GoZ files for older ZBrush versions.",
+    [RoutineCall,ZBGetSysInfo]
+    [RoutineCall,ZBRunExport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:Import",
+    "Import GoZ files from a newer ZBrush ZBridge export into the current version.",
+    [RoutineCall,ZBGetSysInfo]
+    [RoutineCall,ZBRunImport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:About ZBridge",
+    "ZBridge - Cross-Version Tool Migration Plugin",
+    [RoutineCall,ZBGetSysInfo]
+    [VarSet,zbNoteText,[StrMerge,"ZBridge v0.8.0\n+ Cross-Version Tool Migration\nSubtool, Subdivision, Dynamic, Folder, Visibility, Texture, Layers\nZBrush Version: ",ZVers,"\nPlatform: ",zbPlatformStr,"\nAuthor: Aniraiden"]]
+    [NoteIButton,"Close"]
+    [Note,zbNoteText,,,4737096,,320]
+,,0.8]

@@ -1,0 +1,8 @@
+//ZBridge Folder Test - step2g: only IPress button, no Dump
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Test IPress Only",
+    "Only test IPress",
+    [IPress,Tool:Sphere3D]
+    [Note,"IPress Sphere3D worked",,1,4737096,,200]
+,,1]

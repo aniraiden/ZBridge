@@ -1,0 +1,9 @@
+//ZBridge Folder Test - Minimal load test
+[VarDef,testNote,""]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Hello",
+    "Click to verify script loaded",
+    [Note,"Test script loaded OK!",,1,4737096,,200]
+,,1]

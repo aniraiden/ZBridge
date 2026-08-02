@@ -1,0 +1,68 @@
+//ZBridge Folder Test - step2a: step1 + 1 extra button
+[VarDef,testNoteText,""]
+[VarDef,testSTCount,0]
+[VarDef,testIdx,0]
+[VarDef,testStatus,0]
+[VarDef,testBit0,0]
+[VarDef,testBit1,0]
+[VarDef,testBit10,0]
+[VarDef,testBit11,0]
+[VarDef,testIsFolder,0]
+[VarDef,testSTName,""]
+[VarDef,testLineStr,""]
+[VarDef,testCurIdx,0]
+
+[RoutineDef,ZBTestDump,
+    [VarSet,testSTCount,[SubToolGetCount]]
+    [VarSet,testNoteText,[StrMerge,"SubTool States (",testSTCount," total)\n----------------------------------------------\n"]]
+    [VarSet,testIdx,0]
+    [Loop,testSTCount,
+        [SubToolSelect,testIdx]
+        [VarSet,testStatus,[SubToolGetStatus,testIdx]]
+        [VarSet,testBit0,0]
+        [If,(testStatus & 1) == 1,[VarSet,testBit0,1]]
+        [VarSet,testBit1,0]
+        [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+        [VarSet,testBit10,0]
+        [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+        [VarSet,testBit11,0]
+        [If,(testStatus & 2048) == 2048,[VarSet,testBit11,1]]
+        [VarSet,testIsFolder,0]
+        [If,testBit10 == 1,[VarSet,testIsFolder,1]]
+        [If,testBit11 == 1,[VarSet,testIsFolder,1]]
+        [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+        [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+        [VarSet,testLineStr,"  TOOL"]
+        [If,testIsFolder == 1,
+            [VarSet,testLineStr,"FOLDER"]
+        ]
+        [If,testBit0 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," b0=1"]]]
+        [If,testBit0 == 0,[VarSet,testLineStr,[StrMerge,testLineStr," b0=0"]]]
+        [If,testBit1 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," b1=VIS"]]]
+        [If,testBit1 == 0,[VarSet,testLineStr,[StrMerge,testLineStr," b1=HID"]]]
+        [If,testBit10 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," CLOSED"]]]
+        [If,testBit11 == 1,[VarSet,testLineStr,[StrMerge,testLineStr," OPENED"]]]
+        [If,testIsFolder == 1,
+            [If,testBit10 == 0,
+                [If,testBit11 == 0,
+                    [VarSet,testLineStr,[StrMerge,testLineStr," OPEN"]]
+                ]
+            ]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,"  [",testIdx,"] ",testSTName,"\n    ",testLineStr,"\n"]]
+        [VarInc,testIdx]
+    ]
+    [Note,testNoteText,,1,4737096,,600]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Dump SubTool States",
+    "Read all subtools and display bit states",
+    [RoutineCall,ZBTestDump]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Hello",
+    "Test button",
+    [Note,"Hello from step2a",,1,4737096,,200]
+,,1]

@@ -1,0 +1,7 @@
+﻿//ZBridge Test 3 Include Data File
+[VarDef,zb_incVar,"Included Variable"]
+[VarDef,zb_incNote,""]
+
+[RoutineDef,ZB_IncRoutine,
+[VarSet,zb_incNote,[StrMerge,"Inc var: ",zb_incVar]]
+]

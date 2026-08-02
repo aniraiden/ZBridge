@@ -1,0 +1,183 @@
+﻿//ZLayer_probe5 - ZBridge 0.8.0 T4 导入侧裁决探针 (单次运行拿全部数据)
+//裁决目标(一次全测):
+//  P5-1  goz 导入 Base 后: 细分级别是否保留(SDivMax) / 层数 / IGetTitle(,0)vs(,1) 路径形态
+//  P5-2  New 后: 层是否建成 / 社区拼路径 IModGet bit0(录制) 是否可用(对照 IGetTitle(,1))
+//  P5-3  最高SDiv录制态导入 Layer0: 层是否保留(更新路径 vs 替换路径) / 退录制 IClick 是否生效
+//用法: 先保存当前工作! 加载本脚本 -> ZPlugin:ZBridge_Test > Layer Probe5
+//  确认后脚本自动: 导入 test22 的 Base.goz(替换当前工具) -> New -> 导入 Layer0.goz
+//输出: 4 段自动消失 Note(8-12秒), 全程零人工操作(仅开头确认+结尾观察)
+//注意: 脚本会把当前工具替换为 layertest02 测试网格
+[VarDef,zbMsg,""]
+[VarDef,zbLayerPath,""]
+[VarDef,zbLayerName,""]
+[VarDef,zbLayerMod,0]
+[VarDef,zbLayerW,0]
+[VarDef,zbLayerH,0]
+[VarDef,zbCount,0]
+[VarDef,zbMaxS,0]
+[VarDef,zbBasePath,""]
+[VarDef,zbLay0Path,""]
+[VarDef,zbInputFile,""]
+[VarDef,zbBasePos,0]
+[VarDef,zbProbeMem,0]
+[VarDef,zbResPath,"C:/Users/Administrator/Desktop/test22/probe5_result.txt"]
+
+//~~~层数读取(IsEnabled 防护链, 空列表安全)~~~
+[RoutineDef,ZP5Count,
+[VarSet,zbCount,0]
+[If,[IExists,Tool:Layers:Layer Intensity],
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[ISet,Tool:Layers:Layers Scrollbar,0,255]
+[VarSet,zbCount,[IGetSecondary,Tool:Layers:Layers Scrollbar]]
+[VarInc,zbCount]
+[If,zbCount < 1,
+[VarSet,zbCount,0]
+]
+]
+]
+]
+
+//~~~主流程~~~
+[RoutineDef,ZP5Run,
+[NoteIButton,"OK"]
+[Note,"Layer Probe5 裁决探针\n\n将自动执行:\n 1) 导入 layertest02_LayerBase.goz 替换当前工具\n 2) 测细分级别 图层状态\n 3) New 建层 测录制位\n 4) 最高SDiv录制态导入 Layer0.goz 退录制\n\n请先保存当前工作 确认后开始\n\n脚本会自动切到 SimpleBrush 默认工具\n 避免导入弹替换确认框 保证一次跑完\n\n若仍弹出确认框 请点 OK 或 Replace 或 Yes 继续\n 不要点 Cancel\n\n数据将同步写入 test22 probe5_result.txt",,,4737096,,800]
+[MemCreate,zbProbeMem,32768]
+//--- 0. 文件选择(与 ZBridge 导入一致: 用户手动选 = 已确认替换, 后续导入不弹确认框) ---
+[VarSet,zbInputFile,[FileNameAsk,"GoZ(*.goz)|*.goz||",,"Select layertest02_LayerBase.goz from test22..."]]
+[If,[StrLength,zbInputFile] <= 0,
+[NoteIButton,"OK"]
+[Note,"已取消 脚本终止",,,4737096,,400]
+[Exit]
+]
+[VarSet,zbBasePath,zbInputFile]
+[VarSet,zbBasePos,[StrFind,"_LayerBase",zbBasePath,0]]
+[VarSet,zbLay0Path,[StrMerge,[StrExtract,zbBasePath,0,zbBasePos-1],"_Layer0.goz"]]
+//--- P5-0 导入前对照 ---
+[VarSet,zbMsg,"=== P5-0 导入前(对照) ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"工具名: ",[IGetTitle,Tool:Item Info],"\n"]]
+[VarSet,zbMaxS,0]
+[If,[IExists,Tool:Geometry:SDiv],[VarSet,zbMaxS,[IGetMax,Tool:Geometry:SDiv]]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SDivMax: ",[Val,zbMaxS],"\n"]]
+[RoutineCall,ZP5Count]
+[VarSet,zbMsg,[StrMerge,zbMsg,"层数: ",[Val,zbCount],"\n"]]
+[MemWriteString,zbProbeMem,zbMsg]
+[MemSaveToFile,zbProbeMem,zbResPath]
+[Note,zbMsg,,,4737096,,1400]
+//--- 切到 SimpleBrush 干净默认工具(避免导入弹替换确认框) ---
+[IPress,Tool:SimpleBrush]
+[Delay,0.2]
+[VarSet,zbMsg,"P5-SB 已自动切到 SimpleBrush 当前工具: ",[IGetTitle,Tool:Item Info],"\n"]
+[Note,zbMsg,,,4737096,,400]
+[MemWriteString,zbProbeMem,zbMsg]
+[MemSaveToFile,zbProbeMem,zbResPath]
+//--- P5-1 导入 Base.goz ---
+[Note,"即将导入所选 Base 文件\n若弹出替换确认对话框请点 OK 或 Replace 或 Yes 继续",3]
+[FileNameSetNext,zbBasePath]
+[IPress,Tool:Import]
+[Delay,0.8]
+[VarSet,zbMsg,"=== P5-1 导入Base后 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"工具名: ",[IGetTitle,Tool:Item Info],"\n"]]
+[VarSet,zbMaxS,0]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMaxS,[IGetMax,Tool:Geometry:SDiv]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SDivMax: ",[Val,zbMaxS]," SDivCur: ",[Val,[IGet,Tool:Geometry:SDiv]],"\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"SDiv: 无此项!\n"]]
+]
+[RoutineCall,ZP5Count]
+[VarSet,zbMsg,[StrMerge,zbMsg,"层数: ",[Val,zbCount],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"LayerIntensity: IExists=",[IExists,Tool:Layers:Layer Intensity]," IsEnabled=",[IsEnabled,Tool:Layers:Layer Intensity],"\n"]]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLayerName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"标题(0): '",zbLayerName,"'\n"]]
+[VarSet,zbLayerPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"fullpath(1): '",zbLayerPath,"' IExists=",[IExists,zbLayerPath],"\n"]]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"顶点数: ",[Mesh3DGet,0],"\n"]]
+[MemWriteString,zbProbeMem,zbMsg]
+[MemSaveToFile,zbProbeMem,zbResPath]
+[Note,zbMsg,,,4737096,,1400]
+//--- P5-2 切最高SDiv + New ---
+[If,zbMaxS > 0,
+[ISet,Tool:Geometry:SDiv,zbMaxS]
+]
+[IPress,Tool:Layers:New]
+[Delay,0.3]
+[VarSet,zbMsg,"=== P5-2 New后(最高SDiv) ===\n"]
+[RoutineCall,ZP5Count]
+[VarSet,zbMsg,[StrMerge,zbMsg,"层数: ",[Val,zbCount]," (0->1=New建成)\n"]]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLayerName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前层名: '",zbLayerName,"'\n"]]
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",zbLayerName]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"拼路径: ",zbLayerPath," IExists=",[IExists,zbLayerPath],"\n"]]
+[VarSet,zbLayerPath,[IGetTitle,Tool:Layers:Layer Intensity,1]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"fullpath(1): '",zbLayerPath,"' IExists=",[IExists,zbLayerPath],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"--- 拼路径 IModGet (若此步报错=关键证据) ---\n"]]
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",[IGetTitle,Tool:Layers:Layer Intensity]]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"拼路径 IModGet=",[Val,zbLayerMod],"\n"]]
+[If,(zbLayerMod & 1) == 1,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0=1 -> 录制中 ✓\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0=0 -> 未录制 ✗\n"]]
+]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"!! New后 Layer Intensity 不可用 -> New 未建成层\n"]]
+]
+[MemWriteString,zbProbeMem,zbMsg]
+[MemSaveToFile,zbProbeMem,zbResPath]
+[Note,zbMsg,,,4737096,,1400]
+//--- P5-3 最高SDiv录制态导入 Layer0.goz ---
+[Note,"即将导入 Layer0 快照\n若弹出替换确认对话框请点 OK 或 Replace 或 Yes 继续",3]
+[FileNameSetNext,zbLay0Path]
+[IPress,Tool:Import]
+[Delay,0.8]
+[VarSet,zbMsg,"=== P5-3 Import Layer0后 ===\n"]
+[RoutineCall,ZP5Count]
+[VarSet,zbMsg,[StrMerge,zbMsg,"层数: ",[Val,zbCount]," (仍=1=>层保留/录制导入成功; =0=>被替换清空)\n"]]
+[VarSet,zbMaxS,0]
+[If,[IExists,Tool:Geometry:SDiv],
+[VarSet,zbMaxS,[IGetMax,Tool:Geometry:SDiv]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SDivMax: ",[Val,zbMaxS]," SDivCur: ",[Val,[IGet,Tool:Geometry:SDiv]],"\n"]]
+]
+[VarSet,zbMsg,[StrMerge,zbMsg,"顶点数: ",[Mesh3DGet,0],"\n"]]
+[If,[IsEnabled,Tool:Layers:Layer Intensity],
+[VarSet,zbLayerName,[IGetTitle,Tool:Layers:Layer Intensity]]
+[VarSet,zbLayerPath,[StrMerge,"Tool:Layers:",zbLayerName]]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前层 '",zbLayerName,"' IModGet=",[Val,zbLayerMod],"\n"]]
+[If,(zbLayerMod & 1) == 1,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0=1 录制中 -> IClick 退录制(W-25,H/2)...\n"]]
+[VarSet,zbLayerW,[IWidth,zbLayerPath]]
+[VarSet,zbLayerH,[IHeight,zbLayerPath]]
+[IClick,zbLayerPath,zbLayerW-25,zbLayerH/2]
+[Delay,0.2]
+[VarSet,zbLayerMod,[IModGet,zbLayerPath]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"退录制后 IModGet=",[Val,zbLayerMod],"\n"]]
+[If,(zbLayerMod & 1) == 1,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0仍=1 -> 退录制失败 ✗\n"]]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0=0 -> 退录制成功 ✓\n"]]
+]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"bit0=0 未录制(导入前已非录制?)\n"]]
+]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"!! Import后 Layer Intensity 不可用 -> 层被清空(替换路径实锤)\n"]]
+]
+[MemWriteString,zbProbeMem,zbMsg]
+[MemSaveToFile,zbProbeMem,zbResPath]
+[Note,zbMsg,,,4737096,,1400]
+//--- P5-4 手动验证 ---
+[NoteIButton,"OK"]
+[Note,"P5-4 请手动检查并回报:\n\n1) 层面板当前层强度拖到 1 网格是否出现 Layer0 形变?\n   出现=录制导入成功 无变化=层为空或导入未入层\n2) 层面板现在有几层? 层名是什么?\n3) 若层数为 0 替换路径坐实 记下 P5-3 输出\n4) 若一切正常 可继续用同一批文件测 ZBridge 完整导入\n\n提示: 以上全部数据已写入\nC:/Users/Administrator/Desktop/test22/probe5_result.txt\n可直接打开该文件复制粘贴回报",,,4737096,,800]
+[MemSaveToFile,zbProbeMem,zbResPath]
+[MemDelete,zbProbeMem]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe5",
+    "ZBridge 0.8.0 probe5: single-run verdict on goz import SDiv/New/record-mode/import-path.",
+    [RoutineCall,ZP5Run]
+,,1]

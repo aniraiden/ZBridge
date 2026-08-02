@@ -1,0 +1,21 @@
+﻿//ZBridge Test B - Simple RoutineDef (no empty lines in routine)
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbNoteText,""]
+[VarDef,zbPlatformStr,"Windows"]
+
+[RoutineDef,ZBGetSysInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+[If,isMac,[VarSet,zbPlatformStr,"Mac"]]
+]
+
+[ISubPalette,"ZPlugin:ZBridgeB"]
+
+[IButton,"ZPlugin:ZBridgeB:About",
+    "About ZBridge Test B",
+    [RoutineCall,ZBGetSysInfo]
+    [VarSet,zbNoteText,[StrMerge,"ZBrush: ",ZVers,"\nPlatform: ",zbPlatformStr]]
+    [NoteIButton,"Close"]
+    [Note,zbNoteText,,1,4737096,,200]
+,,1]

@@ -1,0 +1,576 @@
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//ZBridge - ZBrush Cross-Version Tool Migration Plugin
+//Version: 0.4.0
+//Description: Export/Import Tools across different ZBrush versions via GoZ format
+//             + Folder structure reconstruction + visibility fix
+//Usage: Load via ZScript panel > Load button
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//~~~GLOBAL VARIABLES~~~
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbToolName,""]
+[VarDef,zbSubToolCount,0]
+[VarDef,zbExportTempDir,""]
+[VarDef,zbImportDir,""]
+[VarDef,zbSavePath,""]
+[VarDef,zbIdx,0]
+[VarDef,zbStName,""]
+[VarDef,zbGozPath,""]
+[VarDef,zbConfirmText,""]
+[VarDef,zbNoteText,""]
+[VarDef,zbCf,0]
+[VarDef,zbPlatformStr,"Windows"]
+[VarDef,zbInputFile,""]
+[VarDef,zbGozCount,0]
+[VarDef,zbGozFile,""]
+[VarDef,zbImportErrors,0]
+[VarDef,zbActiveST,0]
+[VarDef,zbMainToolID,0]
+[VarDef,zbTempName,""]
+[VarDef,zbColorizeState,0]
+[VarDef,zbPpFlag,""]
+[VarDef,zbManPath,""]
+[VarDef,zbManMem,"ZBManMem"]
+[VarDef,zbManLine,""]
+[VarDef,zbMaxSdiv,0]
+[VarDef,zbSdivStr,""]
+[VarDef,zbSdivFlag,""]
+[VarDef,zbCurSdiv,0]
+[VarDef,zbCurSdivStr,""]
+[VarDef,zbPipePos1,0]
+[VarDef,zbPipePos2,0]
+[VarDef,zbPipePos3,0]
+//0.2.0 - folder & visibility support
+[VarDef,zbStatus,0]
+[VarDef,zbIsFolder,0]
+[VarDef,zbSubtoolEye,0]
+[VarDef,zbFolderEye,0]
+[VarDef,zbIsOpened,0]
+[VarDef,zbFolderName,""]
+[VarDef,zbMeshIdx,0]
+[VarDef,zbSubEyeStr,""]
+[VarDef,zbFolEyeStr,""]
+[VarDef,zbFolStr,""]
+[VarDef,zbOpenStr,""]
+[VarDef,zbFolNameStr,""]
+[VarDef,zbPipePos4,0]
+[VarDef,zbPipePos5,0]
+[VarDef,zbPipePos6,0]
+[VarDef,zbPipePos7,0]
+[VarDef,zbPipePos8,0]
+
+//0.3.0 - folder reconstruction
+[VarDef,dllPath,""]
+[VarDef,zbFolderTotal,0]
+//~~~ZFileUtils INLINE ROUTINES~~~
+//These are inlined from ZFileUtilsInc.txt for portability.
+//dllPath must be set before calling any of these.
+[RoutineDef,ZFU_RenameSetNext,
+    [FileExecute,[Var,dllPath],RenameSetNext,str]
+,str]
+
+[RoutineDef,ZFU_RenameCurrentSubTool,
+    [If,([IExists,"Tool:SubTool:Rename"] && [IsEnabled,"Tool:SubTool:Rename"]),
+        [FileExecute,[Var,dllPath],RenameSetNext,str]
+        [IPress,"Tool:SubTool:Rename"]
+    ]
+,str]
+
+//~~~SYSTEM INFO ROUTINE~~~
+[RoutineDef,ZBGetSysInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+[If,isMac,[VarSet,zbPlatformStr,"Mac"]]
+]
+
+//~~~EXPORT ROUTINE~~~
+//Exports all SubTools (incl. folders) as GoZ files + extended manifest
+//Manifest record: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name\0
+//Folder detection: 0x400 (Closed) or 0x800 (Opened) bit set => isFolder=1
+//Visibility: subtoolEye=bit0 (subtool own eye), folderEye=bit1 (folder eye, folder heads only)
+//Folder state: isOpened=1 if 0x800 bit set, 0 if 0x400 bit set
+[RoutineDef,ZBRunExport,
+[RoutineCall,ZBGetSysInfo]
+[VarSet,zbToolName,[IGetTitle,Tool:Item Info]]
+[If,[StrLength,zbToolName] <= 0,
+[NoteIButton,"Close"]
+[Note,"No Tool loaded. Please load a Tool first.",,1,4737096,,200]
+[Exit]
+]
+[VarSet,zbSubToolCount,[SubToolGetCount]]
+[If,zbSubToolCount <= 0,
+[NoteIButton,"Close"]
+[Note,"No SubTools found to export.",,1,4737096,,200]
+[Exit]
+]
+[VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","export.goz","ZBridge Export - Choose location..."]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[VarSet,zbExportTempDir,[FileNameExtract,zbSavePath,1]]
+[VarSet,zbConfirmText,[StrMerge,"ZBridge Export\n\nTool: ",zbToolName,"\nSubTools: ",zbSubToolCount,"\n\nOutput Folder:\n",zbExportTempDir]]
+[NoteIButton,"Proceed"]
+[NoteIButton,"Cancel"]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,[Exit]]
+[VarSet,zbActiveST,[SubToolGetActiveIndex]]
+[VarSet,zbIdx,0]
+[VarSet,zbMeshIdx,0]
+[MemDelete,zbManMem]
+[MemCreate,zbManMem,32768]
+[VarSet,zbManOffset,0]
+[VarSet,zbManBytes,0]
+[Loop,zbSubToolCount,
+[VarSet,zbStatus,[SubToolGetStatus,zbIdx]]
+//Folder detection: 0x400 (Closed) or 0x800 (Opened) bit set => isFolder=1
+//用嵌套If表达OR逻辑，避免不确定的布尔运算符
+[VarSet,zbIsFolder,0]
+[If,(zbStatus & 1024) == 1024,
+[VarSet,zbIsFolder,1]]
+[If,(zbStatus & 2048) == 2048,
+[VarSet,zbIsFolder,1]]
+[If,zbIsFolder == 1,
+[SubToolSelect,zbIdx]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbStName,[StrExtract,zbStName,0,[StrLength,zbStName]-2]]
+//文件夹条目：folderName=文件夹名（用于Import重建命名），name=子工具名（文件夹头名字）
+[VarSet,zbFolderName,[SubToolGetFolderName,zbIdx]]
+[VarSet,zbIsFolder,1]
+//Folder head: subtoolEye=bit0, folderEye=bit1, isOpened from 0x800
+[If,(zbStatus & 1) == 1,
+[VarSet,zbSubtoolEye,1]
+,
+[VarSet,zbSubtoolEye,0]
+]
+[If,(zbStatus & 2) == 2,
+[VarSet,zbFolderEye,1]
+,
+[VarSet,zbFolderEye,0]
+]
+[If,(zbStatus & 1024) == 1024,
+[VarSet,zbIsOpened,0]
+,
+[VarSet,zbIsOpened,1]
+]
+,
+[SubToolSelect,zbIdx]
+[VarSet,zbStName,[IGetTitle,Tool:Item Info]]
+[VarSet,zbStName,[StrExtract,zbStName,0,[StrLength,zbStName]-2]]
+[VarSet,zbFolderName,[SubToolGetFolderName,zbIdx]]
+[VarSet,zbIsFolder,0]
+//Normal subtool: subtoolEye=bit0, folderEye always 0, isOpened always 0
+[If,(zbStatus & 1) == 1,
+[VarSet,zbSubtoolEye,1]
+,
+[VarSet,zbSubtoolEye,0]
+]
+[VarSet,zbFolderEye,0]
+[VarSet,zbIsOpened,0]
+]
+[VarSet,zbColorizeState,0]
+[VarSet,zbMaxSdiv,0]
+[VarSet,zbCurSdiv,0]
+//文件夹头也是网格，需要读取colorize/sdiv属性
+[VarSet,zbColorizeState,[IGet,Tool:Polypaint:Colorize]]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[VarSet,zbCurSdiv,[IGet,Tool:Geometry:SDiv]]
+[VarSet,zbMaxSdiv,[IGetMax,Tool:Geometry:SDiv]]
+[ISet,Tool:Geometry:SDiv,zbMaxSdiv]
+]
+]
+[If,zbColorizeState == 0,
+[VarSet,zbPpFlag,"0"]
+,
+[VarSet,zbPpFlag,"1"]
+]
+[If,zbSubtoolEye == 1,
+[VarSet,zbSubEyeStr,"1"]
+,
+[VarSet,zbSubEyeStr,"0"]
+]
+[If,zbFolderEye == 1,
+[VarSet,zbFolEyeStr,"1"]
+,
+[VarSet,zbFolEyeStr,"0"]
+]
+[If,zbIsFolder == 1,
+[VarSet,zbFolStr,"1"]
+,
+[VarSet,zbFolStr,"0"]
+]
+[If,zbIsOpened == 1,
+[VarSet,zbOpenStr,"1"]
+,
+[VarSet,zbOpenStr,"0"]
+]
+[VarSet,zbFolNameStr,zbFolderName]
+[VarSet,zbSdivStr,[Val,zbMaxSdiv]]
+[VarSet,zbCurSdivStr,[Val,zbCurSdiv]]
+//分步拼接避免超长StrMerge
+[VarSet,zbManLine,[StrMerge,zbPpFlag,"|",zbSdivStr,"|",zbCurSdivStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbSubEyeStr,"|",zbFolEyeStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbFolStr,"|",zbOpenStr]]
+[VarSet,zbManLine,[StrMerge,zbManLine,"|",zbFolNameStr,"|",zbStName,[StrFromAsc,0]]]
+[VarSet,zbManBytes,[MemWriteString,zbManMem,zbManLine,zbManOffset]]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+//所有条目都导出GoZ（文件夹头本身也是网格模型）
+[VarSet,zbGozPath,[StrMerge,zbExportTempDir,"/",zbStName,".goz"]]
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Export]
+[If,zbMaxSdiv > 0,
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+[VarInc,zbMeshIdx]
+[VarInc,zbIdx]
+]
+[MemResize,zbManMem,zbManOffset]
+[VarSet,zbManPath,[StrMerge,zbExportTempDir,"/zbridge_manifest.txt"]]
+[MemSaveToFile,zbManMem,zbManPath]
+[MemDelete,zbManMem]
+[SubToolSelect,zbActiveST]
+[VarSet,zbNoteText,[StrMerge,"Export Complete!\n\nTool: ",zbToolName,"\nTotal entries: ",zbSubToolCount,"\nMeshes exported: ",zbMeshIdx,"\n\nFolder:\n",zbExportTempDir]]
+[NoteIButton,"Close"]
+[Note,zbNoteText,,1,4737096,,400]
+]
+
+//~~~MANIFEST PARSE ROUTINE (shared by import phases)~~~
+//Parses all 8 pipe positions from zbManLine into global zbPipePos1-8
+//Format: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name
+[RoutineDef,ZBRunManParse,
+    [VarSet,zbPipePos1,[StrFind,"|",zbManLine]]
+    [VarSet,zbPipePos2,[StrFind,"|",zbManLine,zbPipePos1+1]]
+    [VarSet,zbPipePos3,[StrFind,"|",zbManLine,zbPipePos2+1]]
+    [VarSet,zbPipePos4,[StrFind,"|",zbManLine,zbPipePos3+1]]
+    [VarSet,zbPipePos5,[StrFind,"|",zbManLine,zbPipePos4+1]]
+    [VarSet,zbPipePos6,[StrFind,"|",zbManLine,zbPipePos5+1]]
+    [VarSet,zbPipePos7,[StrFind,"|",zbManLine,zbPipePos6+1]]
+    [VarSet,zbPipePos8,[StrFind,"|",zbManLine,zbPipePos7+1]]
+]
+
+//~~~IMPORT ROUTINE~~~
+//Imports Mesh_N.goz as flat SubTools + restores name/colorize/sdiv from manifest
+//Folder entries (isFolder=1) are skipped in phase 1; visibility/folders restored in phases 2-3
+[RoutineDef,ZBRunImport,
+[RoutineCall,ZBGetSysInfo]
+//Load ZFileUtils DLL for folder renaming
+[VarSet,dllPath,""]
+[If,[ZBrushInfo,16]==64,
+    [If,isMac,
+        [VarSet,dllPath,"ZBridgeData/ZFileUtils.lib"]
+    ,
+        [VarSet,dllPath,"ZBridgeData/ZFileUtils64.dll"]
+    ]
+]
+[VarSet,zbInputFile,[FileNameAsk,"GoZ(*.goz)|*.goz||",,"Select a GoZ file from ZBridge export..."]]
+[If,[StrLength,zbInputFile] <= 0,[Exit]]
+[VarSet,zbImportDir,[FileNameExtract,zbInputFile,1]]
+//Read manifest and count entries
+[VarSet,zbManPath,[StrMerge,zbImportDir,"zbridge_manifest.txt"]]
+[If,[FileExists,zbManPath],
+,
+[NoteIButton,"Close"]
+[Note,[StrMerge,"Manifest not found:\n",zbManPath],,1,4737096,,350]
+[Exit]
+]
+[MemDelete,zbManMem]
+[MemCreateFromFile,zbManMem,zbManPath]
+[VarSet,zbGozCount,0]
+[VarSet,zbManOffset,0]
+[Loop,256,
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[If,[StrLength,zbManLine] <= 0,
+[LoopExit]
+]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[VarInc,zbGozCount]
+]
+[If,zbGozCount <= 0,
+[NoteIButton,"Close"]
+[Note,"Manifest is empty",,1,4737096,,200]
+[MemDelete,zbManMem]
+[Exit]
+]
+//Confirm import
+[VarSet,zbConfirmText,[StrMerge,"ZBridge Import\n\nEntries in manifest: ",zbGozCount,"\nSource: ",zbInputFile,"\n\nImports SubTools with folder structure restoration."]]
+[NoteIButton,"Import"]
+[NoteIButton,"Cancel"]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,
+[MemDelete,zbManMem]
+[Exit]
+]
+//Phase 1: Import GoZ files as flat SubTools
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+[VarSet,zbImportErrors,0]
+[VarSet,zbMainToolID,0]
+[VarDef,zbLastIdx,0]
+[VarDef,zbNewIdx,0]
+[Loop,zbGozCount,
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[RoutineCall,ZBRunManParse]
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,[StrLength,zbManLine]-1]]
+[VarSet,zbGozFile,[StrMerge,zbImportDir,zbStName,".goz"]]
+[If,[FileExists,zbGozFile],
+[If,zbIdx == 0,
+[FileNameSetNext,zbGozFile]
+[IPress,Tool:Import]
+[VarSet,zbMainToolID,[IGet,Tool:Item Info]]
+,
+[ISet,Tool:Item Info,zbMainToolID]
+[VarSet,zbLastIdx,[SubToolGetCount] - 1]
+[SubToolSelect,zbLastIdx]
+[IPress,Tool:SubTool:Duplicate]
+[VarSet,zbNewIdx,[SubToolGetCount] - 1]
+[SubToolSelect,zbNewIdx]
+[FileNameSetNext,zbGozFile]
+[IPress,Tool:Import]
+]
+,
+[VarInc,zbImportErrors]
+]
+[VarInc,zbIdx]
+]
+//Phase 2: Restore colorize, SubDiv, visibility from manifest
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+[Loop,zbGozCount,
+[SubToolSelect,zbIdx]
+[VarSet,zbManLine,""]
+[MemReadString,zbManMem,zbManLine,zbManOffset]
+[VarSet,zbManBytes,[StrLength,zbManLine] + 1]
+[VarSet,zbManOffset,zbManOffset + zbManBytes]
+[RoutineCall,ZBRunManParse]
+//Parse property fields
+[VarSet,zbPpFlag,[StrExtract,zbManLine,0,zbPipePos1-1]]
+[VarSet,zbSdivFlag,[StrExtract,zbManLine,zbPipePos1+1,zbPipePos2-1]]
+[VarSet,zbCurSdivStr,[StrExtract,zbManLine,zbPipePos2+1,zbPipePos3-1]]
+[VarSet,zbCurSdiv,[Val,zbCurSdivStr]]
+[VarSet,zbSubEyeStr,[StrExtract,zbManLine,zbPipePos3+1,zbPipePos4-1]]
+[VarSet,zbFolEyeStr,[StrExtract,zbManLine,zbPipePos4+1,zbPipePos5-1]]
+[VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+//Restore Colorize
+[If,[IExists,Tool:Polypaint:Colorize],
+[If,[Val,zbPpFlag] == 1,
+[ISet,Tool:Polypaint:Colorize,1]
+,
+[ISet,Tool:Polypaint:Colorize,0]
+]
+]
+//Restore SubDiv
+[If,zbSdivFlag == 0,
+,
+[If,[IExists,Tool:Geometry:Reconstruct Subdiv],
+[VarSet,zbMaxSdiv,[Val,zbSdivFlag]]
+[VarSet,zbMaxSdiv,zbMaxSdiv - 1]
+[If,zbMaxSdiv > 0,
+[VarSet,zbTempName,0]
+[Loop,zbMaxSdiv,
+[If,[IsEnabled,Tool:Geometry:Reconstruct Subdiv],
+[IPress,Tool:Geometry:Reconstruct Subdiv]
+,
+[LoopExit]
+]
+[VarInc,zbTempName]
+]
+]
+[If,[IExists,Tool:Geometry:SDiv],
+[If,[IsEnabled,Tool:Geometry:SDiv],
+[ISet,Tool:Geometry:SDiv,zbCurSdiv]
+]
+]
+]
+]
+//Restore Visibility
+//Folders: effective visibility = folderEye (bit1)
+//Normal subtools: effective visibility = subtoolEye (bit0)
+[VarSet,zbStatus,[SubToolGetStatus,zbIdx]]
+[If,[Val,zbFolStr] == 1,
+    [If,[Val,zbFolEyeStr] == 1,
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+    ,
+        [If,(zbStatus & 1) == 1,
+            [VarSet,zbStatus,zbStatus - 1]
+        ]
+    ]
+,
+    [If,[Val,zbSubEyeStr] == 1,
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+    ,
+        [If,(zbStatus & 1) == 1,
+            [VarSet,zbStatus,zbStatus - 1]
+        ]
+    ]
+]
+[SubToolSetStatus,zbIdx,zbStatus]
+[VarInc,zbIdx]
+]
+//Phase 3: Rebuild folder structure (New Folder + MoveUp)
+[VarDef,zbFolManIdx,0]
+[VarDef,zbFolEyeVal,0]
+[VarDef,zbFolOpenVal,0]
+[VarDef,zbSubEyeVal,0]
+[VarDef,zbFolCursor,0]
+[VarDef,zbContentCnt,0]
+[VarDef,zbContOff,0]
+//Count folders in manifest
+[VarSet,zbFolderTotal,0]
+[VarSet,zbManOffset,0]
+[VarSet,zbIdx,0]
+[Loop,zbGozCount,
+    [VarSet,zbManLine,""]
+    [MemReadString,zbManMem,zbManLine,zbManOffset]
+    [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+    [RoutineCall,ZBRunManParse]
+    [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+    [If,[Val,zbFolStr]==1,
+        [VarInc,zbFolderTotal]
+    ]
+    [VarSet,zbManOffset,zbManOffset+zbManBytes]
+    [VarInc,zbIdx]
+]
+//Process folders bottom-to-top
+[If,zbFolderTotal > 0,
+    [VarSet,zbFolCursor,zbFolderTotal]
+    [Loop,zbFolderTotal,
+        [VarDec,zbFolCursor]
+        //Find this folder's entry in manifest
+        [VarSet,zbManOffset,0]
+        [VarSet,zbIdx,0]
+        [VarSet,zbContOff,0]
+        [Loop,zbGozCount,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [RoutineCall,ZBRunManParse]
+            [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+            [If,[Val,zbFolStr]==1,
+                [If,zbContOff==zbFolCursor,
+                    [VarSet,zbFolManIdx,zbIdx]
+                    [VarSet,zbSubEyeVal,[Val,[StrExtract,zbManLine,zbPipePos3+1,zbPipePos4-1]]]
+                    [VarSet,zbFolEyeVal,[Val,[StrExtract,zbManLine,zbPipePos4+1,zbPipePos5-1]]]
+                    [VarSet,zbFolOpenVal,[Val,[StrExtract,zbManLine,zbPipePos6+1,zbPipePos7-1]]]
+                    [VarSet,zbFolName,[StrExtract,zbManLine,zbPipePos7+1,zbPipePos8-1]]
+                    [LoopExit]
+                ]
+                [VarInc,zbContOff]
+            ]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+            [VarInc,zbIdx]
+        ]
+        //Current subtool index = manifest index (bottom-to-top: no shift from folders above)
+        [VarSet,zbCurSubIdx,zbFolManIdx]
+        //Count content subtools (scan forward until next folder or end)
+        [VarSet,zbContentCnt,0]
+        [VarSet,zbManOffset,0]
+        [VarSet,zbIdx,0]
+        [Loop,zbFolManIdx+1,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+            [VarInc,zbIdx]
+        ]
+        [Loop,zbGozCount-zbFolManIdx-1,
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [RoutineCall,ZBRunManParse]
+            [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+            [If,[Val,zbFolStr]==1,
+                [LoopExit]
+            ]
+            //Check zbFolNameStr: consecutive pipes (empty field) = standalone subtool → stop
+            [If,zbPipePos8 - zbPipePos7 == 1,
+                [LoopExit]
+            ]
+            [VarInc,zbContentCnt]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+        ]
+        //Create folder (wraps selected subtool with pre-set name)
+        [SubToolSelect,zbCurSubIdx]
+        //Pre-set folder name to avoid rename dialog
+        [If,[StrLength,dllPath] > 0,
+            [If,[FileExists,dllPath],
+                [If,[StrLength,zbFolName] > 0,
+                    [FileExecute,[Var,dllPath],RenameSetNext,zbFolName]
+                ]
+            ]
+        ]
+        [IPress,Tool:SubTool:New Folder]
+        //MoveUp content subtools into folder
+        [If,zbContentCnt > 0,
+            [SubToolSelect,zbCurSubIdx+1]
+            [Loop,zbContentCnt,
+                [IPress,Tool:SubTool:MoveUp]
+                [IPress,Tool:SubTool:SelectDown]
+            ]
+        ]
+        //Set folder state AFTER New Folder and MoveUp
+        //Use If+arithmetic instead of bitwise |/& for reliability
+        [SubToolSelect,zbCurSubIdx]
+        [VarSet,zbStatus,[SubToolGetStatus,zbCurSubIdx]]
+        //bit0 = 1 (container visible)
+        [If,(zbStatus & 1) == 0,
+            [VarSet,zbStatus,zbStatus + 1]
+        ]
+        //bit10 = 0 (clear ClosedFolder for temporary)
+        [If,(zbStatus & 1024) == 1024,
+            [VarSet,zbStatus,zbStatus - 1024]
+        ]
+        //bit1 = zbFolEyeVal (folder eye visibility)
+        [If,zbFolEyeVal == 1,
+            [If,(zbStatus & 2) == 0,
+                [VarSet,zbStatus,zbStatus + 2]
+            ]
+        ,
+            [If,(zbStatus & 2) == 2,
+                [VarSet,zbStatus,zbStatus - 2]
+            ]
+        ]
+        //bit10 = 1024 if folder should be closed
+        [If,zbFolOpenVal != 1,
+            [If,(zbStatus & 1024) == 0,
+                [VarSet,zbStatus,zbStatus + 1024]
+            ]
+        ]
+        [SubToolSetStatus,zbCurSubIdx,zbStatus]
+    ]
+]
+[MemDelete,zbManMem]
+[VarSet,zbNoteText,[StrMerge,"Import Complete!\n\nEntries processed: ",zbGozCount,"\nErrors: ",zbImportErrors]]
+[NoteIButton,"Close"]
+[Note,zbNoteText,,1,4737096,,300]
+]
+
+//~~~USER INTERFACE~~~
+[ISubPalette,"ZPlugin:ZBridge"]
+
+[IButton,"ZPlugin:ZBridge:Export For Older Version",
+    "Export the current Tool with all SubTools to GoZ files for older ZBrush versions.",
+    [RoutineCall,ZBGetSysInfo]
+    [RoutineCall,ZBRunExport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:Import From Newer Version",
+    "Import GoZ files from a newer ZBrush ZBridge export into the current version.",
+    [RoutineCall,ZBGetSysInfo]
+    [RoutineCall,ZBRunImport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:About ZBridge",
+    "ZBridge - Cross-Version Tool Migration Plugin",
+    [RoutineCall,ZBGetSysInfo]
+    [VarSet,zbNoteText,[StrMerge,"ZBridge v0.4.0\n\nCross-Version Tool Migration\n+ Folder Structure Support\n+ Visibility Bugfix\n\nZBrush Version: ",ZVers,"\nPlatform: ",zbPlatformStr]]
+    [NoteIButton,"Close"]
+    [Note,zbNoteText,,1,4737096,,250]
+,,0.5]

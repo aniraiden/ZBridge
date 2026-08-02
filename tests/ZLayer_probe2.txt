@@ -1,0 +1,73 @@
+﻿//ZLayer_probe2 - ZBridge 0.8.0 图层第二轮定向探测
+//用途: ①按名称寻址图层是否可行(决定导出侧导航) ②SelectDown 环绕行为 ③导出参考MDD锁定格式
+//准备: 当前 Tool 的活动子工具含 2 个已命名图层 LayerA/ LayerB(有形变, 强度1/0.5)
+//      (建议先删除 probe1 产生的空层 Untitled Layer 1, 无碍亦可)
+//加载: ZScript 面板 > Load；运行: ZPlugin:ZBridge_Test > Layer Probe2
+[VarDef,zbMsg,""]
+[VarDef,zbVal,0]
+[VarDef,zbMod,0]
+[VarDef,zbPath,""]
+[VarDef,zbSavePath,""]
+
+[RoutineDef,ZLayerProbe2Run,
+//======== Test 1: 按名称寻址 ========
+[VarSet,zbMsg,"=== Test1: 按名称寻址 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IExists Tool:Layers:LayerA: ",[IExists,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IExists Tool:Layers:LayerB: ",[IExists,Tool:Layers:LayerB],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IGetTitle LayerA: ",[IGetTitle,Tool:Layers:LayerA],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"IModGet LayerA: ",[IModGet,Tool:Layers:LayerA],"\n"]]
+//功能验证: 选中LayerA -> 强度置0.41 -> 读回; 选中LayerB -> 读强度(应为0.5非0.41)
+[VarSet,zbMsg,[StrMerge,zbMsg,"-- 功能验证(0.41标记法) --\n"]]
+[If,[IExists,Tool:Layers:LayerA],
+[ISet,Tool:Layers:LayerA,0]
+[ISet,Tool:Layers:Intensity,0.41]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"选中LayerA后强度: ",[Val,zbVal],"\n"]]
+[ISet,Tool:Layers:LayerB,0]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"再选LayerB后强度: ",[Val,zbVal],"(期望0.5=选择已移动)\n"]]
+[ISet,Tool:Layers:LayerA,0]
+[ISet,Tool:Layers:Intensity,1.0]
+,
+[VarSet,zbMsg,[StrMerge,zbMsg,"LayerA 路径不存在 - 按名称寻址不可用\n"]]
+]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Test 2: SelectDown/SelectUp 环绕与强度变化 ========
+[VarSet,zbMsg,"=== Test2: SelectDown 强度变化探测 ===\n"]
+[VarSet,zbMsg,[StrMerge,zbMsg,"当前强度: ",[Val,[IGet,Tool:Layers:Intensity]],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x1 后强度: ",[Val,zbVal],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x2 后强度: ",[Val,zbVal],"\n"]]
+[IPress,Tool:Layers:SelectDown]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectDown x3 后强度: ",[Val,zbVal],"\n"]]
+[IPress,Tool:Layers:SelectUp]
+[VarSet,zbVal,[IGet,Tool:Layers:Intensity]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectUp x1 后强度: ",[Val,zbVal],"\n"]]
+[VarSet,zbMsg,[StrMerge,zbMsg,"SelectUp x2 后强度: ",[Val,[IGet,Tool:Layers:Intensity]],"\n"]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,500]
+//======== Test 3: 导出参考 MDD（锁定格式） ========
+[NoteIButton,"OK"]
+[Note,"Test3: 导出参考 MDD\n\n脚本将调用 Record Deformation Animation 录制形变:\n1) 先弹出保存框, 请选择保存为 reference.mdd\n2) 开始录制后, 请用笔刷在网格上画几笔(任意形变)\n3) 画完后点 OK, 脚本停止录制并写出 MDD\n\n此文件用于确认 ZBrush 的 MDD 格式布局。",,,4737096,,500]
+[VarSet,zbSavePath,[FileNameAsk,"MDD(*.mdd)|*.mdd||","reference.mdd","Save reference MDD..."]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+[FileNameSetNext,zbSavePath]
+[IPress,Tool:Layers:Record Deformation Animation]
+[NoteIButton,"OK"]
+[Note,"正在录制中! 请现在用笔刷在网格上画几笔形变, 完成后点 OK 停止录制。",,,4737096,,400]
+[IPress,Tool:Layers:Record Deformation Animation]
+[VarSet,zbMsg,[StrMerge,"参考 MDD 已导出到:\n",zbSavePath]]
+[NoteIButton,"Close"]
+[Note,zbMsg,,,4737096,,400]
+]
+
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+[IButton,"ZPlugin:ZBridge_Test:Layer Probe2",
+    "ZBridge 0.8.0 layer probe2: by-name addressing + SelectDown behavior + reference MDD export.",
+    [RoutineCall,ZLayerProbe2Run]
+,,1]

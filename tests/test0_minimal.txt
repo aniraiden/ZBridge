@@ -1,0 +1,19 @@
+﻿//ZBridge Test 0 - Reference Structure Copy
+//Minimal test to verify ZBrush can load this
+
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+
+[RoutineDef,TestSystem,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+]
+
+[ISubPalette,"ZPlugin:ZBridgeTest"]
+
+[IButton,"ZPlugin:ZBridgeTest:About",
+    "About ZBridge Test",
+    [RoutineCall,TestSystem]
+    [NoteIButton,"Close"]
+    [Note,[StrMerge,"ZBrush Version: ",ZVers],,1,4737096,,200]
+,,1]

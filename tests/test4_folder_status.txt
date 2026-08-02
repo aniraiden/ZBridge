@@ -1,0 +1,191 @@
+//ZBridge Test 4 - Folder Detection & Visibility (0.2.0 Phase 1)
+//Manual unit tests for SubToolGetStatus/SubToolSetStatus/SubToolGetFolderName + 7-field manifest
+//Usage: Load in ZBrush via ZScript panel > Load button
+
+[VarDef,t4Status,0]
+[VarDef,t4Idx,0]
+[VarDef,t4Count,0]
+[VarDef,t4Name,""]
+[VarDef,t4Folder,""]
+[VarDef,t4IsFol,0]
+[VarDef,t4Vis,0]
+[VarDef,t4Msg,""]
+[VarDef,t4Orig,0]
+[VarDef,t4Flags,0]
+[VarDef,t4Mem,"T4Mem"]
+[VarDef,t4Line,""]
+[VarDef,t4Off,0]
+[VarDef,t4Bytes,0]
+[VarDef,t4P1,0]
+[VarDef,t4P2,0]
+[VarDef,t4P3,0]
+[VarDef,t4P4,0]
+[VarDef,t4P5,0]
+[VarDef,t4P6,0]
+[VarDef,t4F1,""]
+[VarDef,t4F2,""]
+[VarDef,t4F3,""]
+[VarDef,t4F4,""]
+[VarDef,t4F5,""]
+[VarDef,t4F6,""]
+[VarDef,t4F7,""]
+[VarDef,t4F8,""]
+[VarDef,t4F9,""]
+[VarDef,t4P7,0]
+[VarDef,t4P8,0]
+[VarDef,t4B1,0]
+[VarDef,t4B2,0]
+[VarDef,t4B400,0]
+[VarDef,t4B800,0]
+
+[ISubPalette,"ZPlugin:ZBridgeT4"]
+
+//Test 0: Debug Raw Status - show raw decimal status value only
+[IButton,"ZPlugin:ZBridgeT4:Debug Raw Status",
+    "Show raw SubToolGetStatus decimal value for all subtools.",
+    [VarSet,t4Count,[SubToolGetCount]]
+    [If,t4Count <= 0,
+    [NoteIButton,"Close"]
+    [Note,"No subtools loaded.",,1,4737096,,200]
+    [Exit]
+    ]
+    [VarSet,t4Msg,"Idx|Name|Status|Folder\n"]
+    [VarSet,t4Idx,0]
+    [Loop,t4Count,
+    [VarSet,t4Status,[SubToolGetStatus,t4Idx]]
+    [SubToolSelect,t4Idx]
+    [VarSet,t4Name,[IGetTitle,Tool:Item Info]]
+    [VarSet,t4Name,[StrExtract,t4Name,0,[StrLength,t4Name]-2]]
+    [VarSet,t4Folder,[SubToolGetFolderName,t4Idx]]
+    [VarSet,t4Msg,[StrMerge,t4Msg,[Val,t4Idx],"|",t4Name,"|",[Val,t4Status],"|",t4Folder,"\n"]]
+    [VarInc,t4Idx]
+    ]
+    [NoteIButton,"Close"]
+    [Note,t4Msg,,1,4737096,,400]
+,,1]
+
+//Test 1: Detect Folders - iterate all subtools, show index/name/isFolder/subtoolEye/folderEye/isOpened/folderName
+[IButton,"ZPlugin:ZBridgeT4:Detect Folders",
+    "Iterate all subtools and show folder/visibility status for each.",
+    [VarSet,t4Count,[SubToolGetCount]]
+    [If,t4Count <= 0,
+    [NoteIButton,"Close"]
+    [Note,"No subtools loaded.",,1,4737096,,200]
+    [Exit]
+    ]
+    [VarSet,t4Msg,"Idx|Name|isFol|Vis|Folder\n"]
+    [VarSet,t4Idx,0]
+    [Loop,t4Count,
+    [VarSet,t4Status,[SubToolGetStatus,t4Idx]]
+    [SubToolSelect,t4Idx]
+    [VarSet,t4Name,[IGetTitle,Tool:Item Info]]
+    [VarSet,t4Name,[StrExtract,t4Name,0,[StrLength,t4Name]-2]]
+    //Folder detection: 0x400 (Closed) or 0x800 (Opened) bit set
+    //用嵌套If表达OR逻辑
+    [VarSet,t4IsFol,0]
+    [If,(t4Status & 1024) == 1024,
+    [VarSet,t4IsFol,1]]
+    [If,(t4Status & 2048) == 2048,
+    [VarSet,t4IsFol,1]]
+    [If,(t4Status & 1) == 1,
+    [VarSet,t4Vis,1]
+    ,
+    [VarSet,t4Vis,0]
+    ]
+    [VarSet,t4Folder,[SubToolGetFolderName,t4Idx]]
+    [VarSet,t4Msg,[StrMerge,t4Msg,[Val,t4Idx],"|",t4Name,"|",[Val,t4IsFol],"|",[Val,t4Vis],"|",t4Folder,"\n"]]
+    [VarInc,t4Idx]
+    ]
+    [NoteIButton,"Close"]
+    [Note,t4Msg,,1,4737096,,400]
+,,1]
+
+//Test 2: Visibility RW - read current visibility, toggle, read, restore, show round-trip
+[IButton,"ZPlugin:ZBridgeT4:Visibility RW",
+    "Test visibility read/write round-trip on current subtool.",
+    [VarSet,t4Idx,[SubToolGetActiveIndex]]
+    [VarSet,t4Status,[SubToolGetStatus,t4Idx]]
+    [VarSet,t4Orig,t4Status]
+    [If,(t4Status & 1) == 1,
+    [VarSet,t4Vis,1]
+    ,
+    [VarSet,t4Vis,0]
+    ]
+    [VarSet,t4Msg,[StrMerge,"Original status: ",[Val,t4Orig]," visible=",[Val,t4Vis],"\n"]]
+    [If,t4Vis == 1,
+    [VarSet,t4Flags,t4Status & 2147483646]
+    [SubToolSetStatus,t4Idx,t4Flags]
+    ,
+    [VarSet,t4Flags,t4Status | 1]
+    [SubToolSetStatus,t4Idx,t4Flags]
+    ]
+    [VarSet,t4Status,[SubToolGetStatus,t4Idx]]
+    [If,(t4Status & 1) == 1,
+    [VarSet,t4Vis,1]
+    ,
+    [VarSet,t4Vis,0]
+    ]
+    [VarSet,t4Msg,[StrMerge,t4Msg,"After toggle: status=",[Val,t4Status]," visible=",[Val,t4Vis],"\n"]]
+    [SubToolSetStatus,t4Idx,t4Orig]
+    [VarSet,t4Status,[SubToolGetStatus,t4Idx]]
+    [If,(t4Status & 1) == 1,
+    [VarSet,t4Vis,1]
+    ,
+    [VarSet,t4Vis,0]
+    ]
+    [VarSet,t4Msg,[StrMerge,t4Msg,"After restore: status=",[Val,t4Status]," visible=",[Val,t4Vis]]]
+    [NoteIButton,"Close"]
+    [Note,t4Msg,,1,4737096,,300]
+,,1]
+
+//Test 3: Manifest 9-Field - write/read/parse 9-field record via Mem
+//Fields: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name
+[IButton,"ZPlugin:ZBridgeT4:Manifest 9-Field",
+    "Test 9-field manifest record write/read/parse round-trip.",
+    [MemDelete,t4Mem]
+    [MemCreate,t4Mem,1024]
+    [VarSet,t4Off,0]
+    [VarSet,t4Line,[StrMerge,"1|4|3|1|0|0|0||Body",[StrFromAsc,0]]]
+    [VarSet,t4Bytes,[MemWriteString,t4Mem,t4Line,t4Off]]
+    [VarSet,t4Off,t4Off + t4Bytes]
+    [VarSet,t4Line,[StrMerge,"0|0|0|1|1|1|1|CharacterFolder|Character",[StrFromAsc,0]]]
+    [VarSet,t4Bytes,[MemWriteString,t4Mem,t4Line,t4Off]]
+    [VarSet,t4Off,t4Off + t4Bytes]
+    [MemResize,t4Mem,t4Off]
+    [VarSet,t4Msg,"Record1: 1|4|3|1|0|0|0||Body\nRecord2: 0|0|0|1|1|1|1|CharacterFolder|Character\n\nParsed:\n"]
+    [VarSet,t4Off,0]
+    [VarSet,t4Idx,0]
+    [Loop,2,
+    [VarSet,t4Line,""]
+    [MemReadString,t4Mem,t4Line,t4Off]
+    [VarSet,t4Bytes,[StrLength,t4Line] + 1]
+    [VarSet,t4Off,t4Off + t4Bytes]
+    [VarSet,t4P1,[StrFind,"|",t4Line]]
+    [VarSet,t4P2,[StrFind,"|",t4Line,t4P1+1]]
+    [VarSet,t4P3,[StrFind,"|",t4Line,t4P2+1]]
+    [VarSet,t4P4,[StrFind,"|",t4Line,t4P3+1]]
+    [VarSet,t4P5,[StrFind,"|",t4Line,t4P4+1]]
+    [VarSet,t4P6,[StrFind,"|",t4Line,t4P5+1]]
+    [VarSet,t4P7,[StrFind,"|",t4Line,t4P6+1]]
+    [VarSet,t4P8,[StrFind,"|",t4Line,t4P7+1]]
+    [VarSet,t4F1,[StrExtract,t4Line,0,t4P1-1]]
+    [VarSet,t4F2,[StrExtract,t4Line,t4P1+1,t4P2-1]]
+    [VarSet,t4F3,[StrExtract,t4Line,t4P2+1,t4P3-1]]
+    [VarSet,t4F4,[StrExtract,t4Line,t4P3+1,t4P4-1]]
+    [VarSet,t4F5,[StrExtract,t4Line,t4P4+1,t4P5-1]]
+    [VarSet,t4F6,[StrExtract,t4Line,t4P5+1,t4P6-1]]
+    [VarSet,t4F7,[StrExtract,t4Line,t4P6+1,t4P7-1]]
+    [VarSet,t4F8,[StrExtract,t4Line,t4P7+1,t4P8-1]]
+    [VarSet,t4F9,[StrExtract,t4Line,t4P8+1,[StrLength,t4Line]-1]]
+    //逐步拼接避免超长StrMerge
+    [VarSet,t4Msg,[StrMerge,t4Msg,"R",[Val,t4Idx],":"]]
+    [VarSet,t4Msg,[StrMerge,t4Msg," col=",t4F1," max=",t4F2," cur=",t4F3]]
+    [VarSet,t4Msg,[StrMerge,t4Msg," subEye=",t4F4," folEye=",t4F5]]
+    [VarSet,t4Msg,[StrMerge,t4Msg," isFol=",t4F6," isOpen=",t4F7]]
+    [VarSet,t4Msg,[StrMerge,t4Msg," folder=[",t4F8,"] name=",t4F9,"\n"]]
+    [VarInc,t4Idx]
+    ]
+    [MemDelete,t4Mem]
+    [NoteIButton,"Close"]
+    [Note,t4Msg,,1,4737096,,600]
+,,1]

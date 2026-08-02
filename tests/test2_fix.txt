@@ -1,0 +1,39 @@
+﻿//ZBridge Test 2 - Loop and FileExists (Fixed: camelCase)
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbIdx,0]
+[VarDef,zbCount,0]
+[VarDef,zbFileName,""]
+[VarDef,zbNoteText,""]
+
+[RoutineDef,ZB_GetSystemInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+]
+
+[ISubPalette,"ZPlugin:ZBridgeT2"]
+
+[IButton,"ZPlugin:ZBridgeT2:Loop Test",
+    "Test Loop and StrMerge",
+    [RoutineCall,ZB_GetSystemInfo]
+    [VarSet,zbCount,5]
+    [VarSet,zbIdx,0]
+    [VarSet,zbNoteText,"Counting: "]
+    [Loop,zbCount,
+[VarSet,zbNoteText,[StrMerge,zbNoteText,zbIdx," "]]
+[VarInc,zbIdx]
+]
+    [NoteIButton,"Close"]
+    [Note,zbNoteText,,1,4737096,,250]
+,,1]
+
+[IButton,"ZPlugin:ZBridgeT2:File Test",
+    "Test FileExists command",
+    [VarSet,zbFileName,"ZBridge_TestFile.txt"]
+    [NoteIButton,"Close"]
+    [If,[FileExists,zbFileName],
+[Note,[StrMerge,"File exists: ",zbFileName],,1,4737096,,200]
+,
+[Note,[StrMerge,"File NOT found: ",zbFileName],,1,4737096,,200]
+]
+,,1]

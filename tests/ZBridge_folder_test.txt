@@ -1,0 +1,224 @@
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//ZBridge Folder Visibility Test v0.2
+//Test script for export/import folder visibility (bit1/folEye) preservation
+//Load ZBridge.txt first, then load this script
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//~~~TEST VARIABLES~~~
+[VarDef,testNoteText,""]
+[VarDef,testSTCount,0]
+[VarDef,testIdx,0]
+[VarDef,testStatus,0]
+[VarDef,testBit0,0]
+[VarDef,testBit1,0]
+[VarDef,testBit10,0]
+[VarDef,testBit11,0]
+[VarDef,testIsFolder,0]
+[VarDef,testSTName,""]
+[VarDef,testLineStr,""]
+[VarDef,testCurIdx,0]
+
+//~~~DUMP SUBTOOL STATES~~~
+//Reads all subtools and displays bit0, bit1, bit10, bit11 status
+[RoutineDef,ZBTestDump,
+    [VarSet,testSTCount,[SubToolGetCount]]
+    [If,testSTCount <= 0,
+        [Note,"No SubTools loaded.",,1,4737096,,200]
+    ,
+        [VarSet,testNoteText,[StrMerge,"SubTool State Dump (Total: ",testSTCount,")\n----------------------------------------------\n"]]
+        [VarSet,testIdx,0]
+        [Loop,testSTCount,
+            [SubToolSelect,testIdx]
+            [VarSet,testStatus,[SubToolGetStatus,testIdx]]
+            //Parse bits
+            [VarSet,testBit0,0]
+            [If,(testStatus & 1) == 1,[VarSet,testBit0,1]]
+            [VarSet,testBit1,0]
+            [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+            [VarSet,testBit10,0]
+            [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+            [VarSet,testBit11,0]
+            [If,(testStatus & 2048) == 2048,[VarSet,testBit11,1]]
+            [VarSet,testIsFolder,0]
+            [If,testBit10 == 1,[VarSet,testIsFolder,1]]
+            [If,testBit11 == 1,[VarSet,testIsFolder,1]]
+            //Get name
+            [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+            [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+            //Build tag
+            [VarSet,testLineStr,"  TOOL "]
+            [If,testIsFolder == 1,
+                [VarSet,testLineStr,"FOLDER "]
+            ]
+            [If,testBit0 == 1,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"b0=1 "]]
+            ,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"b0=0 "]]
+            ]
+            [If,testBit1 == 1,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"b1=1(VISIBLE) "]]
+            ,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"b1=0(HIDDEN) "]]
+            ]
+            [If,testBit10 == 1,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"CLOSED "]]
+            ]
+            [If,testBit11 == 1,
+                [VarSet,testLineStr,[StrMerge,testLineStr,"OPENED "]]
+            ]
+            [If,(testIsFolder == 1) && (testBit10 == 0) && (testBit11 == 0),
+                [VarSet,testLineStr,[StrMerge,testLineStr,"OPEN "]]
+            ]
+            [VarSet,testNoteText,[StrMerge,testNoteText,"  [",testIdx,"] ",testSTName,"\n    ",testLineStr,"\n"]]
+            [VarInc,testIdx]
+        ]
+        [VarSet,testNoteText,[StrMerge,testNoteText,"\nEXPECTED after Setup:\n  FolderA [1]: b1=1(VISIBLE) OPEN\n  FolderB [2]: b1=0(HIDDEN) CLOSED"]]
+        [Note,testNoteText,,1,4737096,,600]
+    ]
+]
+
+//~~~SETUP TEST SCENE~~~
+//Creates: 5 flat subtools, then groups into 2 folders with specific visibility
+//FolderA (idx 1): folEye=1 (visible), Open
+//FolderB (idx 2): folEye=0 (invisible), Closed
+[RoutineDef,ZBTestSetup,
+    [IPress,Tool:Sphere3D]
+    [IWait,2]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    [IPress,Tool:SubTool:Duplicate]
+    [IWait,1]
+    //Step 1: Create FolderA at index 1
+    [SubToolSelect,1]
+    [IPress,Tool:SubTool:New Folder]
+    [IWait,1]
+    [SubToolSelect,2]
+    [IPress,Tool:SubTool:MoveUp]
+    [IWait,1]
+    [VarSet,testCurIdx,1]
+    [SubToolSelect,testCurIdx]
+    [VarSet,testStatus,[SubToolGetStatus,testCurIdx]]
+    [VarSet,testStatus,testStatus | 1]
+    [VarSet,testStatus,testStatus | 2]
+    [VarSet,testStatus,testStatus & 2147482623]
+    [SubToolSetStatus,testCurIdx,testStatus]
+    [IWait,1]
+    //Step 2: Create FolderB at index 2
+    [VarSet,testCurIdx,2]
+    [SubToolSelect,testCurIdx]
+    [IPress,Tool:SubTool:New Folder]
+    [IWait,1]
+    [VarSet,testCurIdx,3]
+    [SubToolSelect,testCurIdx]
+    [IPress,Tool:SubTool:MoveUp]
+    [IWait,1]
+    [VarSet,testCurIdx,2]
+    [SubToolSelect,testCurIdx]
+    [VarSet,testStatus,[SubToolGetStatus,testCurIdx]]
+    [VarSet,testStatus,testStatus | 1]
+    [VarSet,testStatus,testStatus & 2147483645]
+    [VarSet,testStatus,testStatus | 1024]
+    [SubToolSetStatus,testCurIdx,testStatus]
+    [IWait,1]
+    [SubToolSelect,0]
+    [Note,"Test scene created!\n\nFlat subtools:\n  [0] base tool (flat)\n  [1] FolderA: folEye=1 Open (content VISIBLE)\n      + 1 child inside\n  [2] FolderB: folEye=0 Closed (content INVISIBLE)\n      + 1 child inside\n\nRun 'Dump States' to verify before export.\nThen export/import via ZBridge.\nRun 'Dump States' again after import to compare.",,1,4737096,,450]
+]
+
+//~~~COMPARE AGAINST MANIFEST~~~
+[RoutineDef,ZBTestCompare,
+    [VarSet,zbManPath,[FileNameAsk,"Text Files(*.txt)|*.txt||","","Select zbridge_manifest.txt to compare"]]
+    [If,[StrLength,zbManPath] <= 0,
+        [Note,"Operation cancelled.",,1,4737096,,200]
+    ,
+        [MemCreate,zbManMem,32768]
+        [MemReadFromFile,zbManMem,zbManPath]
+        [VarSet,testSTCount,[SubToolGetCount]]
+        [VarSet,testNoteText,[StrMerge,"Manifest vs Current State\n----------------------------------------------\nSubtools in ZBrush: ",testSTCount,"\n"]]
+        [VarSet,zbManOffset,0]
+        [VarSet,testIdx,0]
+        [VarSet,zbManErrors,0]
+        [Loop,testSTCount,
+            [If,zbManOffset >= 32768,[LoopExit]]
+            [VarSet,zbManLine,""]
+            [MemReadString,zbManMem,zbManLine,zbManOffset]
+            [If,[StrLength,zbManLine] <= 0,[LoopExit]]
+            [VarSet,zbManBytes,[StrLength,zbManLine]+1]
+            [VarSet,zbPipePos1,[StrFind,"|",zbManLine]]
+            [If,zbPipePos1 > 0,
+                [VarSet,zbPipePos2,[StrFind,"|",zbManLine,zbPipePos1+1]]
+                [VarSet,zbPipePos3,[StrFind,"|",zbManLine,zbPipePos2+1]]
+                [VarSet,zbPipePos4,[StrFind,"|",zbManLine,zbPipePos3+1]]
+                [VarSet,zbPipePos5,[StrFind,"|",zbManLine,zbPipePos4+1]]
+                [VarSet,zbPipePos6,[StrFind,"|",zbManLine,zbPipePos5+1]]
+                [VarSet,zbPipePos7,[StrFind,"|",zbManLine,zbPipePos6+1]]
+                [VarSet,zbFolEyeStr,[StrExtract,zbManLine,zbPipePos4+1,zbPipePos5-1]]
+                [VarSet,zbFolStr,[StrExtract,zbManLine,zbPipePos5+1,zbPipePos6-1]]
+                [VarSet,zbOpenStr,[StrExtract,zbManLine,zbPipePos6+1,zbPipePos7-1]]
+                [If,[Val,zbFolStr] == 1,
+                    [SubToolSelect,testIdx]
+                    [VarSet,testStatus,[SubToolGetStatus,testIdx]]
+                    [VarSet,testBit1,0]
+                    [If,(testStatus & 2) == 2,[VarSet,testBit1,1]]
+                    [VarSet,testBit10,0]
+                    [If,(testStatus & 1024) == 1024,[VarSet,testBit10,1]]
+                    [VarSet,testSTName,[IGetTitle,Tool:Item Info]]
+                    [VarSet,testSTName,[StrExtract,testSTName,0,[StrLength,testSTName]-2]]
+                    [VarSet,testLineStr,[StrMerge,"  [",testIdx,"] ",testSTName,"\n"]]
+                    [If,testBit1 == [Val,zbFolEyeStr],
+                        [VarSet,testLineStr,[StrMerge,testLineStr,"    PASS: folEye=",zbFolEyeStr,"\n"]]
+                    ,
+                        [VarSet,testLineStr,[StrMerge,testLineStr,"    FAIL: folEye expected=",zbFolEyeStr," actual=",testBit1,"\n"]]
+                        [VarInc,zbManErrors]
+                    ]
+                    [If,[Val,zbOpenStr] == 1,
+                        [If,testBit10 == 1,
+                            [VarSet,testLineStr,[StrMerge,testLineStr,"    FAIL: expected OPEN but CLOSED\n"]]
+                            [VarInc,zbManErrors]
+                        ,
+                            [VarSet,testLineStr,[StrMerge,testLineStr,"    PASS: OPEN\n"]]
+                        ]
+                    ,
+                        [If,testBit10 == 0,
+                            [VarSet,testLineStr,[StrMerge,testLineStr,"    FAIL: expected CLOSED but OPEN\n"]]
+                            [VarInc,zbManErrors]
+                        ,
+                            [VarSet,testLineStr,[StrMerge,testLineStr,"    PASS: CLOSED\n"]]
+                        ]
+                    ]
+                    [VarSet,testNoteText,[StrMerge,testNoteText,testLineStr]]
+                ]
+            ]
+            [VarSet,zbManOffset,zbManOffset+zbManBytes]
+            [VarInc,testIdx]
+        ]
+        [If,zbManErrors == 0,
+            [VarSet,testNoteText,[StrMerge,testNoteText,"\nALL TESTS PASSED!"]]
+        ,
+            [VarSet,testNoteText,[StrMerge,testNoteText,"\nFAILURES: ",zbManErrors]]
+        ]
+        [MemDelete,zbManMem]
+        [Note,testNoteText,,1,4737096,,600]
+    ]
+]
+
+//~~~USER INTERFACE~~~
+[ISubPalette,"ZPlugin:ZBridge_Test"]
+
+[IButton,"ZPlugin:ZBridge_Test:Setup Test Scene",
+    "Create a test tool with:\n [1] FolderA folEye=1 Open\n [2] FolderB folEye=0 Closed",
+    [RoutineCall,ZBTestSetup]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Dump SubTool States",
+    "Read all subtools and display bit0, bit1, bit10 status.\nUse after import to verify folder visibility.",
+    [RoutineCall,ZBTestDump]
+,,1]
+
+[IButton,"ZPlugin:ZBridge_Test:Compare with Manifest",
+    "Select zbridge_manifest.txt and compare folder states\nexpected vs actual (PASS/FAIL report).",
+    [RoutineCall,ZBTestCompare]
+,,1]

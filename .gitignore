@@ -1,0 +1,5 @@
+# ZBridge - git ignore rules
+debug.log
+__pycache__/
+*.pyc
+prototype_py/log/

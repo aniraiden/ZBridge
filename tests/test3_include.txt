@@ -1,0 +1,20 @@
+﻿//ZBridge Test 3 - zscriptinsert
+<zscriptinsert,"test3_inc_data.txt">
+
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+
+[RoutineDef,ZB_GetSystemInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+]
+
+[ISubPalette,"ZPlugin:ZBridgeTest3"]
+
+[IButton,"ZPlugin:ZBridgeTest3:Include Test",
+    "Test zscriptinsert",
+    [RoutineCall,ZB_GetSystemInfo]
+    [RoutineCall,ZB_IncRoutine]
+    [NoteIButton,"Close"]
+    [Note,zb_incNote,,1,4737096,,200]
+,,1]

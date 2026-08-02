@@ -1,0 +1,256 @@
+﻿//ZBridge - ZBrush Cross-Version Tool Migration Plugin
+//Version: 0.1.0 (MVP)
+//Load this file via ZScript:Load button
+
+//~~~VARIABLES~~~
+[VarDef,isMac,0]
+[VarDef,ZVers,0]
+[VarDef,zbErr,0]
+[VarDef,zbToolName,""]
+[VarDef,zbSubToolCount,0]
+[VarDef,zbExportTempDir,""]
+[VarDef,zbImportDir,""]
+[VarDef,zbOutputPath,""]
+[VarDef,zbSavePath,""]
+[VarDef,zbBaseName,""]
+[VarDef,zbNavCount,0]
+[VarDef,zbIdx,0]
+[VarDef,zbStName,""]
+[VarDef,zbDataLine,""]
+[VarDef,zbDataFilePath,""]
+[VarDef,zbGozPath,""]
+[VarDef,zbConfirmText,""]
+[VarDef,zbNoteText,""]
+[VarDef,zbCf,0]
+[VarDef,zbPlatformStr,"Windows"]
+[VarDef,zbInputFile,""]
+[VarDef,zbGozCount,0]
+[VarDef,zbTestGoz,""]
+[VarDef,zbGozFile,""]
+[VarDef,zbImportErrors,0]
+[VarDef,zbCt,0]
+[VarDef,zbStIdx,0]
+[VarDef,zbWLen,0]
+[VarDef,zbFilePath,""]
+[VarDef,zbFileContent,""]
+
+//~~~SYSTEM INFO ROUTINE~~~
+[RoutineDef,ZBGetSystemInfo,
+[VarSet,ZVers,[ZBrushInfo,0]]
+[VarSet,isMac,[ZBrushInfo,6]]
+[If,isMac,[VarSet,zbPlatformStr,"Mac"]]
+]
+
+//~~~WRITE TEXT FILE ROUTINE~~~
+[RoutineDef,ZBWriteTextFile,
+[If,[MemGetSize,ZBWriteMem],,[MemCreate,ZBWriteMem,65536,0]]
+[VarSet,zbWLen,[MemWriteString,ZBWriteMem,zbFileContent,0,0]]
+[MemResize,ZBWriteMem,zbWLen]
+[MemSaveToFile,ZBWriteMem,zbFilePath]
+[MemDelete,ZBWriteMem]
+,zbFilePath,zbFileContent]
+
+//~~~EXPORT ROUTINE~~~
+[RoutineDef,ZBRunExport,
+[RoutineCall,ZBGetSystemInfo]
+
+[VarSet,zbToolName,[IGet,"Tool:Name"]]
+[If,[StrLength,zbToolName] <= 0,
+[NoteIButton,"Close"]
+[Note,"No Tool loaded. Please load a Tool first.",,1,4737096,,200]
+[Exit]
+]
+
+[VarSet,zbSubToolCount,[ISubToolGetCount]]
+[If,zbSubToolCount <= 0,
+[NoteIButton,"Close"]
+[Note,"No SubTools found to export.",,1,4737096,,200]
+[Exit]
+]
+
+[VarSet,zbSavePath,[FileNameAsk,"ZBridge(*.zbridge)|*.zbridge||","","Save ZBridge Package As..."]]
+[If,[StrLength,zbSavePath] <= 0,[Exit]]
+
+[VarSet,zbExportTempDir,[FileNameExtract,zbSavePath,1]]
+[VarSet,zbBaseName,[FileNameExtract,zbSavePath,3]]
+[VarSet,zbExportTempDir,[StrMerge,zbExportTempDir,"zbridge_export_",zbBaseName]]
+
+[NoteIButton,"Proceed"]
+[NoteIButton,"Cancel"]
+[VarSet,zbConfirmText,[StrMerge,
+"ZBridge Export\n\n",
+"Tool: ",zbToolName,"\n",
+"SubTools: ",zbSubToolCount,"\n",
+"ZBrush: ",ZVers,"\n\n",
+"Output: ",zbSavePath]
+]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,[Exit]]
+
+[VarSet,zbDataLine,[StrMerge,zbToolName,"|",zbSubToolCount]]
+
+[VarSet,zbNavCount,zbSubToolCount]
+[VarInc,zbNavCount]
+[Loop,zbNavCount,[IPress,"SubTool:Previous"]]
+
+[VarSet,zbIdx,0]
+[Loop,zbSubToolCount,
+[VarSet,zbStName,[IGet,"SubTool:Name"]]
+[VarSet,zbDataLine,[StrMerge,zbDataLine,"|",zbStName]]
+[IPress,"SubTool:Next"]
+[VarInc,zbIdx]
+]
+
+[VarSet,zbDataFilePath,[StrMerge,zbExportTempDir,"/zbridge_info.txt"]]
+[RoutineCall,ZBWriteTextFile,zbDataFilePath,zbDataLine]
+
+[VarSet,zbNavCount,zbSubToolCount]
+[VarInc,zbNavCount]
+[Loop,zbNavCount,[IPress,"SubTool:Previous"]]
+
+[VarSet,zbIdx,0]
+[Loop,zbSubToolCount,
+[VarSet,zbGozPath,[StrMerge,zbExportTempDir,"/SubTool_",zbIdx,".goz"]]
+[FileNameSetNext,zbGozPath]
+[IPress,"Tool:Export"]
+[IPress,"SubTool:Next"]
+[VarInc,zbIdx]
+]
+
+[NoteIButton,"Close"]
+[VarSet,zbNoteText,[StrMerge,
+"Export Complete!\n\n",
+"Tool: ",zbToolName,"\n",
+"SubTools: ",zbSubToolCount,"\n\n",
+"Export directory:\n",zbExportTempDir]
+]
+[Note,zbNoteText,,1,4737096,,400]
+]
+
+//~~~RECOVERY ROUTINE~~~
+[RoutineDef,ZBRERunRecovery,
+[If,[StrLength,zbToolName] > 0,
+[ISet,"Tool:Name",zbToolName]
+]
+
+[VarSet,zbCt,[ISubToolGetCount]]
+[VarSet,zbNavCount,zbCt]
+[VarInc,zbNavCount]
+[Loop,zbNavCount,[IPress,"SubTool:Previous"]]
+
+[VarSet,zbStIdx,0]
+[Loop,zbCt,
+[IPress,"SubTool:Visibility"]
+[IPress,"SubTool:Next"]
+[VarInc,zbStIdx]
+]
+
+[VarSet,zbNavCount,zbCt]
+[VarInc,zbNavCount]
+[Loop,zbNavCount,[IPress,"SubTool:Previous"]]
+]
+
+//~~~IMPORT ROUTINE~~~
+[RoutineDef,ZBRunImport,
+[RoutineCall,ZBGetSystemInfo]
+
+[VarSet,zbInputFile,[FileNameAsk,"ZBridge(*.zbridge)|*.zbridge||","","Open ZBridge Package..."]]
+[If,[StrLength,zbInputFile] <= 0,[Exit]]
+
+[VarSet,zbImportDir,[FileNameExtract,zbInputFile,1]]
+[VarSet,zbBaseName,[FileNameExtract,zbInputFile,3]]
+[VarSet,zbImportDir,[StrMerge,zbImportDir,"zbridge_export_",zbBaseName]]
+
+[VarSet,zbGozCount,0]
+[Loop,256,
+[VarSet,zbTestGoz,[StrMerge,zbImportDir,"/SubTool_",zbGozCount,".goz"]]
+[If,[FileExists,zbTestGoz],
+[VarInc,zbGozCount]
+,
+[LoopExit]
+]
+]
+
+[If,zbGozCount <= 0,
+[NoteIButton,"Close"]
+[Note,[StrMerge,
+"Cannot find any GoZ files in:\n",
+zbImportDir,"\n\n",
+"Please extract the .zbridge package first."],,1,4737096,,350]
+[Exit]
+]
+
+[NoteIButton,"Import"]
+[NoteIButton,"Cancel"]
+[VarSet,zbConfirmText,[StrMerge,
+"Ready to Import\n\n",
+"GoZ files found: ",zbGozCount,"\n",
+"Source: ",zbImportDir,"\n\n",
+"This will import all GoZ files as SubTools."]
+]
+[VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
+[If,zbCf == 2,[Exit]]
+
+[VarSet,zbIdx,0]
+[VarSet,zbImportErrors,0]
+
+[Loop,zbGozCount,
+[VarSet,zbGozFile,[StrMerge,zbImportDir,"/SubTool_",zbIdx,".goz"]]
+
+[If,[FileExists,zbGozFile],
+[FileNameSetNext,zbGozFile]
+[IPress,"Tool:Import"]
+,
+[VarInc,zbImportErrors]
+]
+
+[VarInc,zbIdx]
+]
+
+[RoutineCall,ZBRERunRecovery]
+
+[NoteIButton,"Close"]
+[VarSet,zbNoteText,[StrMerge,
+"Import Complete!\n\n",
+"GoZ files imported: ",zbGozCount,"\n",
+"Errors: ",zbImportErrors]
+]
+[Note,zbNoteText,,1,4737096,,300]
+]
+
+//~~~INTERFACE~~~
+[ISubPalette,"ZPlugin:ZBridge"]
+
+[IButton,"ZPlugin:ZBridge:Export For Older Version",
+    "Export the current Tool with all SubTools to a .zbridge package for older ZBrush versions.",
+    [RoutineCall,ZBGetSystemInfo]
+    [If,ZVers < 2021.0,
+        [NoteIButton,"Close"]
+        [Note,"ZBridge requires ZBrush 2021 or later.",,1,4737096,,200]
+        [Exit]
+    ]
+    [RoutineCall,ZBRunExport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:Import From Newer Version",
+    "Import a .zbridge package created from a newer ZBrush version.",
+    [RoutineCall,ZBGetSystemInfo]
+    [If,ZVers < 2021.0,
+        [NoteIButton,"Close"]
+        [Note,"ZBridge requires ZBrush 2021 or later.",,1,4737096,,200]
+        [Exit]
+    ]
+    [RoutineCall,ZBRunImport]
+,,1]
+
+[IButton,"ZPlugin:ZBridge:About ZBridge",
+    "ZBridge - Cross-Version Tool Migration Plugin",
+    [RoutineCall,ZBGetSystemInfo]
+    [NoteIButton,"Close"]
+    [VarSet,zbNoteText,[StrMerge,
+"ZBridge v0.1.0\n\n",
+"Cross-Version Tool Migration\n\n",
+"ZBrush Version: ",ZVers,"\n",
+"Platform: ",zbPlatformStr]]
+    [Note,zbNoteText,,1,4737096,,250]
+,,0.5]
