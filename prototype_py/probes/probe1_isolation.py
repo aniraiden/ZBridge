@@ -17,6 +17,7 @@ EXPECT_B_INT = 0.5
 
 
 def run():
+    zb.fresh()                      # 强制刷新模块（防 ZBrush 解释器缓存旧代码）
     zb.log_init("s1_isolation")
     os.makedirs(OUT_DIR, exist_ok=True)
     n = zb.layer_detect(zbc)

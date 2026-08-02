@@ -16,6 +16,7 @@ OUT_DIR = r"h:/vibe_coding/ZBridge/prototype_py/out"   # 与 probe1 一致
 
 
 def run():
+    zb.fresh()                      # 强制刷新模块（防 ZBrush 解释器缓存旧代码）
     zb.log_init("s2_record_import")
     n0 = zb.layer_detect(zbc)
     zb.log("S2", f"before layers={n0}")
