@@ -137,7 +137,7 @@ def _classify(tag, mesh, base, dA, dB):
         "base+dA+dB": gozlib.add_pts(gozlib.add_pts(base, dA), dB),
     }
     rows = sorted(((gozlib.residual_max(mesh, c), n) for n, c in cands.items()))
-    name, resid = rows[0]
+    resid, name = rows[0]  # rows[i] = (residual, name)；解包顺序勿反
     zb.log(tag, f"分类 {name}: resid={resid:.6f}（次近 {rows[1][0]:.6f} {rows[1][1]}）")
     return name, resid
 
