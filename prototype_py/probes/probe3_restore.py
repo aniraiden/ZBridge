@@ -1,26 +1,30 @@
 # -*- coding: utf-8 -*-
-"""probe3_restore v5 - S2 恢复算法验证（规格 §S2 probe3）。
-v3/v4 定位结论：
-  1. IModGet 读 rec 位**不可靠**（design_next probe4k："前后对比无法可靠检测录制态"）——
-     v3/v4 的 A 层空白真因是 layer_record_import 以 rec 读为"门"，第二次 New 读到假
-     阴性（False）就跳过导入，并非 New 不录制；参考文档明确 "New 创建后自动进入录制"，
-     用户肉眼（"最后一个是录制状态"）亦证实。
-  2. Tool:Import 在存在**录制层**时无效/被阻塞（v4 的 V0 轮 New 后未退录制，后续 3 轮
-     重置导入全被阻塞、图层逐轮累积成 4 层，全空）。
-v5 变更：
-  - 彻底移除 rec 读门：New -> 导入 -> W-25 退录制点击（New 必录制故方向安全）；
-    层存活用 layer_detect 计数验证（New 后 +1 / Import 后不变，防"工具被替换"灾难）。
-  - 开眼用确定性序列（零读依赖）：置 0（自动关眼）-> IClick W-5 开 -> 恢复强度。
-  - 重置：逐层 Delete 清栈 + Tool:Import base.goz，计数验证 0 层。
-  - 验证全部走网格导出（base+dA+dB / base+dA / base+dB 残差），不信读回。
-验证点：层数 / a_diag=A 捕获 dA / 全强度网格 = base+dA+dB / 层序 / 强度写读往返。
+"""probe3_restore v6 - S2 恢复算法验证（规格 §S2 probe3）。
+v5 结论（同名层陷阱，根因分析完毕）：
+  两层默认名相同（UI 显示 "Untitled Layer 1/0"，但 IGetTitle 对两层均返回
+  "Untitled Layer"），按名寻址 Tool:Layers:Untitled Layer **恒命中首匹配 = 调色板
+  列表第一行（栈顶）**。v5 全部 W-25 退录制点击、W-5 开眼点击、get_mod 读全部落在
+  第一层（B）；第二层（A）录制从未退出、眼从未打开 → 三网格只有 base+dB。
+  用户观察 "第二层形状=LayerA" 证实 A 内容其实录进了层（Import 作用于当前层，不走
+  名称路径），只是从未被"激活"参与网格合成。
+v6 方案：**不依赖命名，用 MoveUp/MoveDown 重排 + 首匹配寻址**（复用 v5 实测规律）：
+  1. 建 B（唯一层，首匹配=B）→ W-25 退录制 ✓（v5 已证明该步正确）
+  2. 归零 B（滑杆，当前层=B）
+  3. 建 A（New 插栈底）→ MoveUp 把 A 移到栈顶 → 首匹配=A → 退录制 + 开眼舞步 ✓
+  4. 需要 B 时再 SelectDown→MoveUp 把 B 移到栈顶
+  - 强度全部走滑杆（当前层，选择式寻址，重名免疫）
+  - 开眼用确定性舞步：置 0（自动关眼）→ IClick W-5（开眼+选中该行）→ 恢复强度
+  - 每次导出在脚本内做残差分类（base / base+dA / base+dB / base+dA+dB），
+    日志自包含，无需外部 analyze；任何寻址失效都会在分类里现形（自诊断）。
+验证点：a_diag=base+dA / restore_full=base+dA+dB / restore_top0=base+dB /
+层数 / 强度写读往返。
 运行：ZBrush 2026.1 ZScript 面板 -> Python Scripting -> Load 加载本文件。
 前置：活动子工具任意状态（脚本自动清理图层并导入 base.goz 重置）。"""
 import os
 import sys
 import time
 
-print("probe3 v5 loading...")
+print("probe3 v6 loading...")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _m in ("gozlib", "zbridge_085"):
     sys.modules.pop(_m, None)
@@ -46,12 +50,9 @@ def _fatal(exc):
 
 def _reset_clean():
     """尽力清空图层栈并导入 base.goz。返回 True 当且仅当最终 0 图层。
-    策略：①直接导入（场景已干净时一步到位）；②逐层 Delete 清栈（杀掉录制态）后导入；
-    ③当前层 W-25 退录制后导入。每步计数验证。"""
+    策略：①直接导入；②逐层 Delete 清栈（杀掉录制态）后导入；③当前层 W-25 退录制后导入。"""
     for step in ("direct", "delete", "w25"):
-        if step == "direct":
-            pass
-        elif step == "delete":
+        if step == "delete":
             try:
                 n = zb.layer_detect(zbc)
                 for _ in range(n + 2):
@@ -78,8 +79,43 @@ def _reset_clean():
     return False
 
 
-def _eye_force_on(tag):
-    """确定性开眼：置 0（自动关眼，已知态）-> IClick W-5 开 -> 恢复原强度。零读依赖。"""
+def _layer_import(goz_path, tag, exit_rec=True):
+    """New -> 导入 goz_path -> [W-25 退录制]。
+    exit_rec=False：新层在栈底暂不可寻址（首匹配=栈顶），退录制延后到 MoveUp 之后。
+    不做 rec 读门（New 必录制）。层存活验证：New 后层数>0、Import 后层数不变。"""
+    zb.layer_log_state(zbc, f"{tag}:before")
+    zbc.press("Tool:Layers:New")
+    zb.layer_log_state(zbc, f"{tag}:after_New")
+    if zb.layer_detect(zbc) == 0:
+        zb.log("LAYER", f"[FAIL] {tag}: New 后层数=0，中止")
+        return False, "new_noop"
+    zbc.set_next_filename(goz_path.replace("\\", "/"))
+    zbc.press("Tool:Import")
+    time.sleep(0.2)
+    zb.layer_log_state(zbc, f"{tag}:after_Import")
+    if zb.layer_detect(zbc) == 0:
+        zb.log("LAYER", f"[FAIL] {tag}: Import 后层数=0（工具被替换），中止")
+        return False, "tool_replaced"
+    if exit_rec:
+        try:
+            p = zb.layer_full_path(zbc)
+            zbc.click(p, zbc.get_width(p) - 25, zbc.get_height(p) / 2)
+            zb.layer_log_state(zbc, f"{tag}:after_exit_click")
+        except Exception as e:
+            zb.log("LAYER", f"{tag}:exit click fail {type(e).__name__}: {e}")
+            return False, f"exit_click:{type(e).__name__}"
+    return True, ""
+
+
+def _move_top(tag):
+    """把当前层移到栈顶（MoveUp；已在顶则 no-op），使首匹配=当前层。"""
+    zbc.press("Tool:Layers:MoveUp")
+    zb.layer_log_state(zbc, f"{tag}:after_MoveUp(当前层→栈顶)")
+
+
+def _eye_force_on_current(tag):
+    """确定性开眼（当前层已在栈顶=首匹配）：置 0（自动关眼）-> IClick W-5 开眼 -> 恢复强度。
+    零读依赖（cur 仅作恢复值，读到异常取 1.0）。"""
     try:
         cur = zb.layer_intensity(zbc)
     except Exception:
@@ -92,32 +128,28 @@ def _eye_force_on(tag):
     zb.log("LAYER", f"{tag}:eye force-on (int 0->click->{cur})")
 
 
-def _layer_import(goz_path, tag):
-    """New -> 导入 goz_path -> W-25 退录制。不做 rec 读门（New 必录制）。
-    层存活验证：New 后层数>0、Import 后层数不变（防 Import 替换工具清层）。
-    返回 (ok, err, count_after_import)。"""
-    zb.layer_log_state(zbc, f"{tag}:before")
-    zbc.press("Tool:Layers:New")
-    zb.layer_log_state(zbc, f"{tag}:after_New")
-    if zb.layer_detect(zbc) == 0:
-        zb.log("LAYER", f"[FAIL] {tag}: New 后层数=0，中止")
-        return False, "new_noop", 0
-    zbc.set_next_filename(goz_path.replace("\\", "/"))
-    zbc.press("Tool:Import")
-    time.sleep(0.2)
-    zb.layer_log_state(zbc, f"{tag}:after_Import")
-    n = zb.layer_detect(zbc)
-    if n == 0:
-        zb.log("LAYER", f"[FAIL] {tag}: Import 后层数=0（工具被替换），中止")
-        return False, "tool_replaced", 0
-    try:
-        p = zb.layer_full_path(zbc)
-        zbc.click(p, zbc.get_width(p) - 25, zbc.get_height(p) / 2)
-        zb.layer_log_state(zbc, f"{tag}:after_exit_click")
-    except Exception as e:
-        zb.log("LAYER", f"{tag}:exit click fail {type(e).__name__}: {e}")
-        return False, f"exit_click:{type(e).__name__}", n
-    return True, "", n
+def _classify(tag, mesh, base, dA, dB):
+    """残差分类：网格=base/base+dA/base+dB/base+dA+dB 中的哪一种。返回 (名称, 残差)。"""
+    cands = {
+        "base": base,
+        "base+dA": gozlib.add_pts(base, dA),
+        "base+dB": gozlib.add_pts(base, dB),
+        "base+dA+dB": gozlib.add_pts(gozlib.add_pts(base, dA), dB),
+    }
+    rows = sorted(((gozlib.residual_max(mesh, c), n) for n, c in cands.items()))
+    name, resid = rows[0]
+    zb.log(tag, f"分类 {name}: resid={resid:.6f}（次近 {rows[1][0]:.6f} {rows[1][1]}）")
+    return name, resid
+
+
+def _assert_mesh(tag, path, expect_name, base, dA, dB):
+    m = gozlib.read_goz_points(path)[1]
+    if len(m) != len(base):
+        zb.log_pass(tag, False, f"顶点数 {len(m)} != {len(base)}")
+        return
+    name, resid = _classify(tag, m, base, dA, dB)
+    ok = name == expect_name
+    zb.log_pass(tag, ok, f"{tag} 应={expect_name} 实测={name} resid={resid:.6f}")
 
 
 def _run():
@@ -136,68 +168,62 @@ def _run():
     if not _reset_clean():
         return
 
-    # 1) 建 LayerB（栈底）：New -> 导入 L1 -> 退录制
-    ok1, e1, nB = _layer_import(f"{OUT_DIR}/L1.goz", "B")
+    # 1) 建 B（栈唯一层）：New -> 导入 L1 -> W-25 退录制（首匹配=B，v5 已验证该步正确）
+    ok1, e1 = _layer_import(f"{OUT_DIR}/L1.goz", "B", exit_rec=True)
     if not ok1:
         return
-    zb.log_pass("RST", nB == 1, f"B 建层后层数应=1（实际 {nB}）")
-    # 2) 归零 B：网格回 base + 自动关眼（+文档化退录制兜底）
+    n = zb.layer_detect(zbc)
+    zb.log_pass("RST", n == 1, f"B 建层后层数应=1（实际 {n}）")
+
+    # 2) 归零 B：网格回 base + 自动关眼
     zbc.set("Tool:Layers:Layer Intensity", 0.0)
     zb.layer_log_state(zbc, "after zero B")
 
-    # 3) 建 LayerA（栈顶）：New -> 导入 L0 -> 退录制。★ 关键：第二次 New+导入能否录得 dA
-    ok2, e2, nA = _layer_import(f"{OUT_DIR}/L0.goz", "A")
+    # 3) 建 A（New 插栈底，暂不退录制——此时首匹配=B）
+    ok2, e2 = _layer_import(f"{OUT_DIR}/L0.goz", "A", exit_rec=False)
     if not ok2:
         return
-    zb.log_pass("RST", nA == 2, f"A 建层后层数应=2（实际 {nA}）")
+    n = zb.layer_detect(zbc)
+    zb.log_pass("RST", n == 2, f"A 建层后层数应=2（实际 {n}）")
 
-    # 4) a_diag：此刻 B@0，A@1；确定性开 A 眼后导出，应 = base+dA
-    _eye_force_on("a_diag")
+    # 4) MoveUp A -> 栈顶 -> 首匹配=A -> 退录制 + 开眼舞步 -> a_diag 应=base+dA
+    _move_top("A")
+    try:
+        p = zb.layer_full_path(zbc)
+        zbc.click(p, zbc.get_width(p) - 25, zbc.get_height(p) / 2)
+        zb.layer_log_state(zbc, "A:after_exit_click(栈顶)")
+    except Exception as e:
+        zb.log("LAYER", f"A:exit click fail {type(e).__name__}: {e}")
+        return
+    _eye_force_on_current("a_diag/A")
     zb.export_goz(zbc, f"{OUT_DIR}/a_diag.goz")
-    diag = gozlib.read_goz_points(f"{OUT_DIR}/a_diag.goz")[1]
-    r_diag = gozlib.residual_max(diag, gozlib.add_pts(base, dA))
-    r_base = gozlib.residual_max(diag, base)
-    zb.log("RST", f"a_diag: vs base+dA={r_diag:.6f} vs base={r_base:.6f} (count={len(diag)})")
-    zb.log_pass("RST", len(diag) == len(base) and r_diag <= max(gozlib.delta_norm(dA) * 1e-3, 1e-4),
-                "第二次 New+导入捕获 dA（A 层有内容且开眼）")
+    _assert_mesh("a_diag", f"{OUT_DIR}/a_diag.goz", "base+dA", base, dA, dB)
 
-    # 5) 完整恢复：导航到 B -> B@1 + 开眼 -> 回 A -> A@1 + 开眼 -> 导出，应 = base+dA+dB
+    # 5) restore_full：当前=A(顶)。SelectDown->B -> MoveUp B(顶) -> B 开眼舞步 -> 导出应=base+dA+dB
     zb.layer_step(zbc, down=True)
-    zb.layer_log_state(zbc, "after step down (应=B)")
-    zbc.set("Tool:Layers:Layer Intensity", 1.0)
-    _eye_force_on("restore B")
-    zb.layer_step(zbc, down=False)
-    zb.layer_log_state(zbc, "after step up (应=A)")
-    zbc.set("Tool:Layers:Layer Intensity", 1.0)
-    _eye_force_on("restore A")
+    zb.layer_log_state(zbc, "after SelectDown (应=B)")
+    _move_top("B")
+    _eye_force_on_current("restore/B")
     zb.export_goz(zbc, f"{OUT_DIR}/restore_full.goz")
-    full = gozlib.read_goz_points(f"{OUT_DIR}/restore_full.goz")[1]
-    expect_full = gozlib.add_pts(gozlib.add_pts(base, dA), dB)
-    resid = gozlib.residual_max(full, expect_full)
-    zb.log("RST", f"full-stack residual={resid:.6f} (count={len(full)})")
-    zb.log_pass("RST", len(full) == len(base) and resid <= max(gozlib.delta_norm(expect_full) * 1e-3, 1e-4),
-                "全强度网格 = base+dA+dB（双录层重建成功）")
+    _assert_mesh("restore_full", f"{OUT_DIR}/restore_full.goz", "base+dA+dB", base, dA, dB)
 
-    # 6) 层序交叉：此刻在栈顶（应=A），A 置 0 -> 剩 base+dB（New 插栈顶成立）
+    # 6) restore_top0：当前=B(顶)。SelectDown->A(底) -> A 置 0 -> 导出应=base+dB
+    zb.layer_step(zbc, down=True)
+    zb.layer_log_state(zbc, "after SelectDown (应=A)")
     zbc.set("Tool:Layers:Layer Intensity", 0.0)
     zb.export_goz(zbc, f"{OUT_DIR}/restore_top0.goz")
-    top0 = gozlib.read_goz_points(f"{OUT_DIR}/restore_top0.goz")[1]
-    resid_order = gozlib.residual_max(top0, gozlib.add_pts(base, dB))
-    zb.log("RST", f"top-zero residual vs base+dB: {resid_order:.6f} (count={len(top0)})")
-    zb.log_pass("RST", len(top0) == len(base) and resid_order <= max(gozlib.delta_norm(dB) * 1e-3, 1e-4),
-                "栈顶=A(dA)，New 插栈顶成立（剩底层 B=dB）")
+    _assert_mesh("restore_top0", f"{OUT_DIR}/restore_top0.goz", "base+dB", base, dA, dB)
 
-    # 7) 恢复栈顶层强度 + 开眼，做强度写读往返
-    zbc.set("Tool:Layers:Layer Intensity", 1.0)
-    _eye_force_on("restore A2")
-    zb.layer_log_state(zbc, "after restore A")
+    # 7) MoveUp A 回顶 -> 强度写读往返（A）-> 最终状态日志
+    _move_top("A")
     zbc.set("Tool:Layers:Layer Intensity", 0.5)
     readback = zb.layer_intensity(zbc)
     zb.log("RST", f"set A=0.5 read_back={readback}")
-    zb.log_pass("RST", abs(readback - 0.5) < 1e-6, "强度写读往返")
+    zb.log_pass("RST", abs(readback - 0.5) < 1e-6, "强度写读往返（A）")
     zbc.set("Tool:Layers:Layer Intensity", 1.0)
-    _eye_force_on("final A")
+    _eye_force_on_current("final/A")
     zb.layer_log_state(zbc, "final state")
+    zb.log("RST", f"final 层数={zb.layer_detect(zbc)}")
 
 
 def run():
