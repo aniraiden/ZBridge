@@ -28,6 +28,11 @@
 - 眼图标点击**有效**（L0/L1 均抓到真实形变）；但点击后立即 IModGet 读取滞后（`now=False` 假象），已从日志中移除该读回、不设状态门。
 - 过程 bug：gozlib 用 `GOZ_TAG_POINT_LIST=10000`，真实 ZBrush 写 `10001`（C 枚举 BASE_ID+1）→ 首跑假阳性 `counts=[0,0,0,0]`；修复后回归测试 + 真实文件可选回归测试（`out/cur.goz` 存在时）双保险。
 
+### S2 录制导入（2026-08-02，probe2 真实 ZBrush 运行 + 机器判定）
+- **结论：录制导入成立**。`New(自动录制) → 导入 L0.goz → 退录制` 后：层数 0→1、rec=False、网格形变与 S1 的 delta(L0) **残差 0.000000**（精确）。
+- 录制语义定案：**层 delta = 导入网格 − 录制起点网格**（起点 = New 按下瞬间的网格）。由此修正 probe3 恢复算法：每建一层前必须归零，否则后建层 delta 被污染为 dA−dB。
+- New 默认层名 "Untitled Layer N"（命名恢复留到 ZScript 版 ZFU）。
+
 ## 实测事实（新发现，随时追加）
 
 - **ZBrush 2026.1 无 Python 交互控制台**：脚本通过 ZScript 面板 → *Python Scripting* 子面板 → **Load** 按钮加载即执行（Reload 重跑上次脚本）；命令行方式为 `ZBrush.exe -script "script.py"`（ZPR 文件放最后参数）。控制台输出需在 *Script Window Mode* 切 *Python Output* 模式（官方 quickstart 2026-08-02 查证；日志文件才是主反馈通道）。官方 hello_world 示例确认标准 `if __name__ == "__main__"` 保护约定。
