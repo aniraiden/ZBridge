@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """probe1_isolation - S1 隔离性探测（规格 §S1）。
 一次运行产出 5 项交叉指标：A 线性恒等式 / B 单层隔离 / D1 D2 污染诊断 / E 拓扑。
-运行：ZBrush 2026+ Python 控制台 exec(open(...)) 。
+运行：ZBrush 2026.1 ZScript 面板 → Python Scripting → Load 加载本文件（加载即执行）。
 前置：活动子工具含 2 层（LayerA@1、LayerB@0.5），形变互异明显。
 输出：prototype_py/log/zb085_*_s1_isolation.log 末尾附结论。"""
 import os

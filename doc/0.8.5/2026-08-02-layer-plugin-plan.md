@@ -562,7 +562,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: 用户运行**
 
-操作：ZBrush 2026+ Python 控制台执行 `exec(open(r"<绝对路径>/prototype_py/probes/probe1_isolation.py", encoding="utf-8").read())`。
+操作：ZBrush 2026.1 **没有 Python 交互控制台**（2026-08-02 实测）。正确入口：**ZScript 面板 → Python Scripting 子面板 → Load 按钮**，选择 `prototype_py/probes/probe1_isolation.py`，加载即执行；改代码后点 **Reload** 重跑。脚本用标准 `if __name__ == "__main__"` 保护（官方 hello_world 同款约定），控制台输出需先在 *Script Window Mode* 切到 *Python Output* 模式（可选，日志文件才是主反馈通道）。
 反馈：直接读取 `prototype_py/log/` 下最新 `zb085_*_s1_isolation.log`，粘贴"=== 结论 ==="后的行 + metric 行即可（无需抄写 Note）。
 
 - [ ] **Step 3: 结果分析 + 分支决策**

@@ -23,7 +23,8 @@
 
 ## 实测事实（新发现，随时追加）
 
-（空）
+- **ZBrush 2026.1 无 Python 交互控制台**：脚本通过 ZScript 面板 → *Python Scripting* 子面板 → **Load** 按钮加载即执行（Reload 重跑上次脚本）；命令行方式为 `ZBrush.exe -script "script.py"`（ZPR 文件放最后参数）。控制台输出需在 *Script Window Mode* 切 *Python Output* 模式（官方 quickstart 2026-08-02 查证；日志文件才是主反馈通道）。官方 hello_world 示例确认标准 `if __name__ == "__main__"` 保护约定。
+
 
 ## 下一步行动
 
