@@ -52,10 +52,14 @@
 ## 实测事实（新发现，随时追加）
 
 - **ZBrush 2026.1 无 Python 交互控制台**：脚本通过 ZScript 面板 → *Python Scripting* 子面板 → **Load** 按钮加载即执行（Reload 重跑上次脚本）；命令行方式为 `ZBrush.exe -script "script.py"`（ZPR 文件放最后参数）。控制台输出需在 *Script Window Mode* 切 *Python Output* 模式（官方 quickstart 2026-08-02 查证；日志文件才是主反馈通道）。官方 hello_world 示例确认标准 `if __name__ == "__main__"` 保护约定。
+- **IClick/IModGet 按"名"解析（首匹配）**：`Tool:Layers:<name>` 类路径命中调色板列表第一行（栈顶），与点击坐标/几何无关；同名层全部操作落栈顶（v5 全中招），唯一名层按名精准解析（probe1 的 LayerA/LayerB 在非顶层也能开眼成功）。**W-5/W-25 点击只对"行内位置"有意义（W-5=眼、W-25=退录制），对"哪一行"无意义。**
+- **滑杆 `ISet/IGet(Tool:Layers:Layer Intensity)` = 当前选中层**（选择式寻址，重名免疫）——v6 日志中 B/A 在非顶层读到各自的 int（0.0/1.0）即铁证。
+- **主程序 T3 导出后调用 ZBRunLayerRestoreMem 恢复原强度+可见性**（ZBridge.txt L805-806）；恢复顺序 = 先强度后可见性、期望与当前不一致才点击（对称恢复原型层用 layer_set_visible 双向）。
+- **主程序 T3 逐层快照循环**：全部归零 → 导出 LayerBase → 从栈底向上逐层（开眼→置1→导出 Layer<j>→置0→SelectUp）；`Layer<j>.goz` 的 j 即 layerIndex（0=原始栈底层）。
+- **T4 建层顺序 = layerIndex 升序**（0=栈底先建），但主程序注释"New 总插栈顶"与 2026.1 实测（**New 插栈底**）矛盾——正是 T4 长期失败的嫌疑点之一；0.8.5 原型已按实测重写（v6 MoveUp 机制）。
 
 
 ## 下一步行动
 
-1. **S2 录制导入 + 恢复算法**：写并运行 `probe2_record_import.py`（New 自动录制 + 导入形变进层）→ `probe3_restore.py`（双录层重建 + 强度/可见性恢复），均以 S1 的 base/L0/L1 delta 为交叉基准。
-2. S3 全功能原型（export_layers/import_layers + 端到端）。
-3. S4 ZScript 移植、S5 并入主程序。
+1. **S3 端到端（进行中）**：`probe_e2e.py` 两段运行——第一段 export（当前子工具须 2 层，设确定性状态后 export_layers + 脚本内自检快照/记录），第二段 import（新会话导入 `<subtool>_LayerBase.goz` 干净网格后 import_layers，导出 e2e_final 与期望网格比对输出 VERIFIED）。**本地 mock 端到端（test_zbridge_mock.py）已全绿**：记录/快照/重建层数/强度/可见性/最终网格六项闭环。
+2. S4 ZScript 移植、S5 并入主程序。
