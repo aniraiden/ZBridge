@@ -10,7 +10,7 @@
 | S0 | 备份与目录规划 | ✅ 完成 | git commit `90d5399`；.gitignore 就绪 |
 | S1 | 隔离性 spike | ✅ 完成 | **隔离成立**：A 残差 5.96e-08（浮点级）、B/E PASS；7938 顶点 |
 | S2 | 录制导入 + 恢复算法 spike | ✅ 完成 | **录制导入成立**（probe2）+ **恢复算法全绿**（probe3 v6：三网格残差 0.000000） |
-| S3 | Python 全功能原型 | ⬜ 未开始 | — |
+| S3 | Python 全功能原型 | ✅ 完成 | 导出段 PASS（23:47）+ 导入段 PASS（08:40 VERIFIED=PASS，用户肉眼：层序/强度/可见性/形状全对，delta 纯净） |
 | S4 | ZScript 移植 | ⬜ 未开始 | — |
 | S5 | 并入主程序 | ⬜ 未开始 | — |
 
@@ -57,9 +57,13 @@
 - **主程序 T3 导出后调用 ZBRunLayerRestoreMem 恢复原强度+可见性**（ZBridge.txt L805-806）；恢复顺序 = 先强度后可见性、期望与当前不一致才点击（对称恢复原型层用 layer_set_visible 双向）。
 - **主程序 T3 逐层快照循环**：全部归零 → 导出 LayerBase → 从栈底向上逐层（开眼→置1→导出 Layer<j>→置0→SelectUp）；`Layer<j>.goz` 的 j 即 layerIndex（0=原始栈底层）。
 - **T4 建层顺序 = layerIndex 升序**（0=栈底先建），但主程序注释"New 总插栈顶"与 2026.1 实测（**New 插栈底**）矛盾——正是 T4 长期失败的嫌疑点之一；0.8.5 原型已按实测重写（v6 MoveUp 机制）。
+- **2026.1 滑杆强度从 0 设到 >0 会自动开眼**（0.8.0 主程序注释"强度>0 不会自动开眼"已过时）。铁证：导出日志 23:47:02 LayerA 快照后置 0 → 恢复 set 1.0 → 紧接着 `click_eye want=False`（IModGet 读到自动开眼，对称点击关闭），after_export 确认 LayerA@1 隐藏成立——证明"强度1+隐藏"可达，也证明设 1.0 确实自动开眼。
+- **导入后层名全是 "Untitled Layer"（重名）**：按名寻址（IClick/IModGet/click W-25/W-5）恒命中栈顶，任何"事后原地恢复 pass"对非栈顶层必然误操作。**解法：可见性在 build 阶段设置（此时本层=栈顶=首匹配，按名寻址唯一安全）；强度因录制隔离必须推迟到恢复 pass，用"SelectDown 到栈底 → MoveUp 到栈顶 → 操作"逐层处理（目标层移到栈顶后按名寻址才安全）**（见"录制起点污染"条目）。
+- **S3 导入段 CHECK 根因**（2026-08-02 23:51 两轮复现）：`import_layers` 旧恢复 pass 只设强度、不碰可见性 → LayerA（记录 vis=False）强度 0→1 自动开眼后被误留可见 → `final = base + dA + dB`（全计残差 0.000000）、用户肉眼两层均可见。旧 pass 另有一处顺序错位（`built_recs` 为栈底→栈顶，却从栈顶开始导航），因两记录强度同为 1.0 被掩盖。**最终修复见下条"录制起点污染"（build 只做可见性、强度恢复 pass 用 MoveUp 机制）。**
+- **录制起点污染**（2026-08-03 08:33 实测）：`New` 的录制起点 = **New 按下瞬间的当前网格**（含所有可见层贡献）。若建层时就把目标强度设上，后建层的 delta 被污染为 `dA−dB`（用户肉眼"第一层形状=LayerA 和负的 LayerB 的叠加"即铁证）；该层若隐藏则最终网格仍正确（e2e 判定 PASS，数据已错）。**修复定案：build 阶段强度保持 0（录制隔离），强度统一由恢复 pass 设置；恢复 pass 每层先 SelectDown 到栈底再 MoveUp 到栈顶后操作（重名层按名寻址恒命中栈顶，必须把目标层移到栈顶才安全），从 idx 最小开始、处理完保留栈顶，层序自然复原。** mock 已补"录制起点=New 时当前网格"模拟（`MockZBC._rec_start`），能捕获此回归。
 
 
 ## 下一步行动
 
-1. **S3 端到端（进行中）**：`probe_e2e.py` 两段运行——第一段 export（当前子工具须 2 层，设确定性状态后 export_layers + 脚本内自检快照/记录），第二段 import（新会话导入 `<subtool>_LayerBase.goz` 干净网格后 import_layers，导出 e2e_final 与期望网格比对输出 VERIFIED）。**本地 mock 端到端（test_zbridge_mock.py）已全绿**：记录/快照/重建层数/强度/可见性/最终网格六项闭环。
+1. **S3 端到端（✅ 完成 2026-08-03 08:40）**：第一段 export PASS（23:47）+ 第二段 import PASS（08:40，`VERIFIED=PASS`、vis 阻断残差 0.000000）；用户肉眼复核：层序（栈顶=LayerA/栈底=LayerB）、强度（1/1）、可见性（隐藏/显示）、形状（纯 LayerA/纯 LayerB）全部正确，delta 纯净。**下一步：Commit → S4 ZScript 移植。**
 2. S4 ZScript 移植、S5 并入主程序。

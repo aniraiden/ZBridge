@@ -180,8 +180,11 @@ def layer_clear(zbc):
 
 
 def layer_build_snapshot(zbc, goz_path, existing_count, want_vis):
-    """v6 建层步：New(自动录制) -> 导入 -> MoveUp×existing_count 到栈顶 -> W-25 退录制
-    -> 可见性（本层已在栈顶=首匹配；want_vis=True 盲开眼，False 置0 关眼）-> 保持强度 0。
+    """建层步：New(自动录制) -> 导入 -> MoveUp×existing_count 到栈顶 -> W-25 退录制
+    -> 置0（确定性关眼）-> want_vis 时 IClick 开眼（此时本层=栈顶，按名寻址唯一安全）
+    -> **强度保持 0**（录制隔离：后续层 New 的录制起点=基准网格，若这里设了目标强度，
+    可见层会污染后建层的录制起点，delta 变成 dA−dB——2026-08-03 实测）。
+    强度由 import_layers 的恢复 pass 统一设置（MoveUp 到栈顶机制）。
     层存活用 IsEnabled 判断（rec 读不可靠，不做读门）。返回 (ok, err)。"""
     zbc.press("Tool:Layers:New")
     if not zbc.is_enabled("Tool:Layers:Layer Intensity"):
@@ -198,16 +201,15 @@ def layer_build_snapshot(zbc, goz_path, existing_count, want_vis):
         zbc.click(p, zbc.get_width(p) - 25, zbc.get_height(p) / 2)
     except Exception as e:
         return False, f"exit_click:{type(e).__name__}"
-    if want_vis:
-        try:
-            zbc.set("Tool:Layers:Layer Intensity", 0.0)
-            p = layer_full_path(zbc)
-            zbc.click(p, zbc.get_width(p) - 5, zbc.get_height(p) / 2)
-            time.sleep(0.05)
-        except Exception as e:
-            return False, f"eye_open:{type(e).__name__}"
-    else:
+    # 可见性设置（本层=栈顶=首匹配，按名寻址安全）；强度保持 0
+    try:
         zbc.set("Tool:Layers:Layer Intensity", 0.0)
+        if want_vis:
+            p = layer_full_path(zbc)
+            zbc.click(p, zbc.get_width(p) - 5, zbc.get_height(p) / 2)  # 关->开
+            time.sleep(0.05)
+    except Exception as e:
+        return False, f"state_set:{type(e).__name__}"
     return True, ""
 
 
@@ -383,13 +385,16 @@ def import_layers(zbc, out_dir, subtool_name=None):
             continue
         log("IMP", f"built idx={r['idx']} name={r['name']} int={r['intensity']} vis={r['visible']}")
         built_recs.append(r)
-    # 恢复每层强度（滑杆=当前层，重名免疫；栈顶->栈底）
+    # 恢复强度+可见性：重名层按名寻址恒命中栈顶，故每层先导航到栈底再 MoveUp 到栈顶
+    # 后操作（首匹配=本层）；从 idx 最小开始，处理完保留在栈顶，层序自然复原为记录序。
     if built_recs:
-        layer_goto_top(zbc, len(built_recs))
         for j, r in enumerate(built_recs):
-            if j > 0:
-                layer_step(zbc, down=True)
+            for _ in range(len(built_recs) - 1):
+                layer_step(zbc, down=True)  # 到栈底（未处理的最下层）
+            for _ in range(len(built_recs) - 1):
+                zbc.press("Tool:Layers:MoveUp")  # 移到栈顶
             layer_set_intensity(zbc, r["intensity"])
+            layer_set_visible(zbc, bool(r["visible"]))
     _sdiv_restore(zbc, cur_sdiv)
     n = layer_detect(zbc)
     log("IMP", f"built={len(built_recs)} fails={fails} final_layer_count={n}")

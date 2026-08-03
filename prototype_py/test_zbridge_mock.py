@@ -41,6 +41,7 @@ class MockZBC:
         self.cur = 0
         self.next_file = ""
         self.sdiv = None
+        self._rec_start = list(base_pts)  # 录制起点：New 按下瞬间的当前网格
 
     # ---- 模型 ----
     def _find_by_name(self, name):
@@ -104,9 +105,12 @@ class MockZBC:
     def set(self, path, h_value=None, v_value=None):
         if "Layer Intensity" in path:
             v = float(h_value)
-            self._current()["int"] = v
+            lay = self._current()
+            if lay["int"] == 0.0 and v > 0.0:
+                lay["vis"] = True  # 2026.1 实测：强度从0设到>0 自动开眼
+            lay["int"] = v
             if v == 0.0:
-                self._current()["vis"] = False
+                lay["vis"] = False
         elif "SDiv" in path:
             self.sdiv = float(h_value)
 
@@ -127,6 +131,7 @@ class MockZBC:
         if path == "Tool:Layers:New":
             self.layers.append({"name": "Untitled Layer", "int": 1.0, "vis": False, "rec": True, "delta": None})
             self.cur = len(self.layers) - 1
+            self._rec_start = self.current_mesh()  # 录制起点 = New 瞬间当前网格（含可见层贡献）
         elif path == "Tool:Layers:MoveUp":
             if self.cur > 0:
                 self.layers[self.cur], self.layers[self.cur - 1] = self.layers[self.cur - 1], self.layers[self.cur]
@@ -145,7 +150,7 @@ class MockZBC:
                 self.cur = min(self.cur, len(self.layers) - 1)
         elif path == "Tool:Import":
             _, pts = gozlib.read_goz_points(self.next_file)
-            self._current()["delta"] = gozlib.vertex_delta(self.base_pts, pts)
+            self._current()["delta"] = gozlib.vertex_delta(self._rec_start, pts)
         elif path == "Tool:Export":
             build_goz(self.next_file, self.current_mesh())
 
