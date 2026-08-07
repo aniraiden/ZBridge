@@ -40,7 +40,8 @@ class MockZBC:
         self.layers = []
         self.cur = 0
         self.next_file = ""
-        self.sdiv = None
+        self.sdiv = 1.0
+        self.sdiv_max = 4.0
         self._rec_start = list(base_pts)  # 录制起点：New 按下瞬间的当前网格
 
     # ---- 模型 ----
@@ -74,10 +75,18 @@ class MockZBC:
         return 20.0
 
     def get_max(self, path):
+        if "SDiv" in path:
+            return self.sdiv_max
         return 5.0
 
     def is_enabled(self, path):
-        return len(self.layers) > 0 if "Layer Intensity" in path else False
+        if "Layer Intensity" in path:
+            return len(self.layers) > 0
+        if "Rename" in path:
+            return len(self.layers) > 0
+        if "SDiv" in path:
+            return True
+        return False
 
     def get_title(self, path, full_path=False):
         if path == "Tool:Item Info":
@@ -148,8 +157,17 @@ class MockZBC:
             if self.layers:
                 del self.layers[self.cur]
                 self.cur = min(self.cur, len(self.layers) - 1)
+        elif path == "Tool:Layers:Rename":
+            self._current()["name"] = self.next_file
         elif path == "Tool:Import":
             _, pts = gozlib.read_goz_points(self.next_file)
+            if len(pts) != len(self._rec_start):
+                # 2026-08-03 实测：录制导入时顶点数不匹配 -> Tool:Import 替换当前工具（丢图层、丢细分）
+                self.layers = []
+                self.cur = 0
+                self.base_pts = list(pts)
+                self.sdiv = 1.0
+                return
             self._current()["delta"] = gozlib.vertex_delta(self._rec_start, pts)
         elif path == "Tool:Export":
             build_goz(self.next_file, self.current_mesh())
@@ -229,6 +247,110 @@ def test_e2e_roundtrip():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_e2e_roundtrip_3layers_rename_sdiv():
+    """场景 3：3 层不同强度 + 层名恢复（重命名）+ SDiv>1 切换/恢复。
+    栈顶=LayerC(1.0,隐藏) / LayerB(0.5,显示) / 栈底=LayerA(1.0,显示)。"""
+    tmp = tempfile.mkdtemp(prefix="zbridge_mock3_")
+    try:
+        OUT = tmp
+        base = [(float(i), 0.0, 0.0) for i in range(12)]
+        dA = [(0.5, 0.0, 0.0) if i < 4 else (0.0, 0.0, 0.0) for i in range(12)]
+        dB = [(0.0, 0.0, 0.0) if i < 4 else ((0.0, 0.3, 0.0) if i < 8 else (0.0, 0.0, 0.0)) for i in range(12)]
+        dC = [(0.0, 0.0, 0.4) if i >= 8 else (0.0, 0.0, 0.0) for i in range(12)]
+
+        m = MockZBC(base)
+        m.sdiv = 1.0
+        m.layers = [
+            {"name": "LayerC", "int": 1.0, "vis": False, "rec": False, "delta": dC},
+            {"name": "LayerB", "int": 0.5, "vis": True,  "rec": False, "delta": dB},
+            {"name": "LayerA", "int": 1.0, "vis": True,  "rec": False, "delta": dA},
+        ]
+        m.cur = 0
+        n = zb.export_layers(m, OUT, "Body")
+        assert n == 3, f"export 记录数 {n}"
+
+        # 快照文件：LayerBase=base，Layer<i>=base+di
+        _, b0 = gozlib.read_goz_points(f"{OUT}/Body_LayerBase.goz")
+        assert near(b0, base), "LayerBase 应=基准网格"
+        for idx, d in ((0, dA), (1, dB), (2, dC)):
+            _, li = gozlib.read_goz_points(f"{OUT}/Body_Layer{idx}.goz")
+            assert near(gozlib.vertex_delta(b0, li), d), f"Layer{idx} delta 应纯净"
+
+        # layers.txt 记录（强度 0.5 必须保留）
+        recs = zb.read_layers_txt(f"{OUT}/layers.txt")
+        assert len(recs) == 3, f"记录数 {len(recs)}"
+        r0, r1, r2 = (rec_by_idx(recs, i) for i in (0, 1, 2))
+        assert r0["name"] == "LayerA" and r0["intensity"] == 1.0 and r0["visible"] is True, r0
+        assert r1["name"] == "LayerB" and r1["intensity"] == 0.5 and r1["visible"] is True, r1
+        assert r2["name"] == "LayerC" and r2["intensity"] == 1.0 and r2["visible"] is False, r2
+
+        # 导出后状态恢复（层序/强度/可见性/层名复原）+ SDiv 复原
+        assert len(m.layers) == 3
+        assert m.layers[0] == {"name": "LayerC", "int": 1.0, "vis": False, "rec": False, "delta": dC}, m.layers[0]
+        assert m.layers[1] == {"name": "LayerB", "int": 0.5, "vis": True,  "rec": False, "delta": dB}, m.layers[1]
+        assert m.layers[2] == {"name": "LayerA", "int": 1.0, "vis": True,  "rec": False, "delta": dA}, m.layers[2]
+        assert m.sdiv == 1.0, f"导出后 SDiv 应复原 {m.sdiv}"
+
+        # 新会话干净网格导入
+        m2 = MockZBC(gozlib.read_goz_points(f"{OUT}/Body_LayerBase.goz")[1])
+        m2.sdiv = 1.0
+        built, fails = zb.import_layers(m2, OUT, None, rename=True)
+        assert built == 3 and fails == 0, f"import built={built} fails={fails}"
+
+        # 重建：层名恢复（mock 重命名成功）、层序、强度、可见性
+        assert len(m2.layers) == 3, f"重建层数 {len(m2.layers)}"
+        assert m2.layers[0]["name"] == "LayerC" and m2.layers[0]["int"] == 1.0 and m2.layers[0]["vis"] is False, m2.layers[0]
+        assert m2.layers[1]["name"] == "LayerB" and m2.layers[1]["int"] == 0.5 and m2.layers[1]["vis"] is True, m2.layers[1]
+        assert m2.layers[2]["name"] == "LayerA" and m2.layers[2]["int"] == 1.0 and m2.layers[2]["vis"] is True, m2.layers[2]
+        assert not any(l["rec"] for l in m2.layers), "录制应已全部退出"
+
+        # 最终网格 = base + dA + 0.5×dB（LayerC 隐藏）
+        exp_off = zb.expected_mesh(OUT, "Body", recs, vis_blocks=True)
+        exp_on = zb.expected_mesh(OUT, "Body", recs, vis_blocks=False)
+        assert exp_off is not None and exp_on is not None
+        assert near(m2.current_mesh(), exp_off), "最终网格应=base+dA+0.5dB（vis 阻断）"
+        assert not near(m2.current_mesh(), exp_on), "不应等于全计"
+
+        # SDiv 复原
+        assert m2.sdiv == 1.0, f"导入后 SDiv 应复原 {m2.sdiv}"
+        print("PASS test_e2e_roundtrip_3layers_rename_sdiv")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_vertex_mismatch_failfast():
+    """场景 4：导入前当前网格顶点数与 goz 不一致（模拟用户重建细分/Divide 后）→ Tool:Import
+    替换工具。import_layers 必须 fail-fast 中止（built=0），不得继续建层污染 delta。"""
+    tmp = tempfile.mkdtemp(prefix="zbridge_mock4_")
+    try:
+        OUT = tmp
+        base = [(float(i), 0.0, 0.0) for i in range(8)]
+        dA = [(0.5, 0.0, 0.0) if i < 4 else (0.0, 0.0, 0.0) for i in range(8)]
+        dB = [(0.0, 0.0, 0.0) if i < 4 else (0.0, 0.3, 0.0) for i in range(8)]
+        m = MockZBC(base)
+        m.layers = [
+            {"name": "LayerB", "int": 1.0, "vis": False, "rec": False, "delta": dB},
+            {"name": "LayerA", "int": 1.0, "vis": True,  "rec": False, "delta": dA},
+        ]
+        m.cur = 0
+        zb.export_layers(m, OUT, "Body")
+
+        # 模拟用户"重建细分"：导入 LayerBase 后把网格换成顶点数不同的网格（Divide 使顶点翻倍）
+        m2 = MockZBC(gozlib.read_goz_points(f"{OUT}/Body_LayerBase.goz")[1])
+        m2.base_pts = [(float(i), 0.0, 0.0) for i in range(20)]
+        m2._rec_start = list(m2.base_pts)
+
+        built, fails = zb.import_layers(m2, OUT, None)
+        assert fails == 1, f"应 fail-fast 报 1 个失败，实际 fails={fails}"
+        assert built == 0, f"fail-fast 后不应继续建层，实际 built={built}"
+        assert len(m2.layers) == 0, f"工具替换后应无图层，实际 {len(m2.layers)}"
+        print("PASS test_import_vertex_mismatch_failfast")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_e2e_roundtrip()
+    test_e2e_roundtrip_3layers_rename_sdiv()
+    test_import_vertex_mismatch_failfast()
     print("ALL PASS")

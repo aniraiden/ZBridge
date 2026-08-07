@@ -179,8 +179,29 @@ def layer_clear(zbc):
         return False, -1
 
 
-def layer_build_snapshot(zbc, goz_path, existing_count, want_vis):
+def layer_rename(zbc, name):
+    """重命名当前层：FileNameSetNext(目标名) + Tool:Layers:Rename。
+    主程序 ZScript 用 ZFU DLL 的 RenameSetNext；Python 侧先用 set_next_filename 试探，
+    失败（层名未变）不中断，返回 (ok, err) 供日志记录。层名唯一化后按名寻址全程安全。"""
+    try:
+        if not zbc.exists("Tool:Layers:Rename"):
+            return False, "no_cmd"
+        if not zbc.is_enabled("Tool:Layers:Rename"):
+            return False, "disabled"
+        zbc.set_next_filename(str(name))
+        zbc.press("Tool:Layers:Rename")
+        time.sleep(0.05)
+        got = layer_name(zbc)
+        ok = (got == str(name))
+        log("LAYER", f"rename target={name} got={got} ok={ok}")
+        return ok, ("" if ok else f"got={got}")
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def layer_build_snapshot(zbc, goz_path, existing_count, want_vis, name=None):
     """建层步：New(自动录制) -> 导入 -> MoveUp×existing_count 到栈顶 -> W-25 退录制
+    -> 重命名（name 提供时；栈顶时按名寻址安全；失败退化为默认名不中断）
     -> 置0（确定性关眼）-> want_vis 时 IClick 开眼（此时本层=栈顶，按名寻址唯一安全）
     -> **强度保持 0**（录制隔离：后续层 New 的录制起点=基准网格，若这里设了目标强度，
     可见层会污染后建层的录制起点，delta 变成 dA−dB——2026-08-03 实测）。
@@ -201,6 +222,8 @@ def layer_build_snapshot(zbc, goz_path, existing_count, want_vis):
         zbc.click(p, zbc.get_width(p) - 25, zbc.get_height(p) / 2)
     except Exception as e:
         return False, f"exit_click:{type(e).__name__}"
+    if name:
+        layer_rename(zbc, name)
     # 可见性设置（本层=栈顶=首匹配，按名寻址安全）；强度保持 0
     try:
         zbc.set("Tool:Layers:Layer Intensity", 0.0)
@@ -302,6 +325,7 @@ def export_layers(zbc, out_dir, subtool_name):
         return 0
     out_dir = out_dir.replace("\\", "/")
     os.makedirs(out_dir, exist_ok=True)
+    cur_sdiv = _sdiv_switch_max(zbc)  # 快照在最高 SDiv 导出，顶点与 import 侧一一对齐
     # 1. 记录各层原状态（栈顶->栈底；layerIndex = n-1-pos，0=原始栈底层）
     recs = []
     layer_goto_top(zbc, n)
@@ -340,13 +364,17 @@ def export_layers(zbc, out_dir, subtool_name):
             layer_step(zbc, down=True)
         layer_set_intensity(zbc, r["intensity"])
         layer_set_visible(zbc, bool(r["visible"]))
+    _sdiv_restore(zbc, cur_sdiv)
     log("EXP", f"export done n={n}")
     return n
 
 
-def import_layers(zbc, out_dir, subtool_name=None):
+def import_layers(zbc, out_dir, subtool_name=None, rename=False):
     """重建活动子工具图层栈（T4 顺序 + v6 MoveUp/首匹配机制）。
     读取 <out_dir>/layers.txt；subtool_name 为 None 时导入全部记录。
+    rename=False（默认）：不重命名层——2026.1 实测 Tool:Layers:Rename 弹模态框
+    "enter layer title" 阻塞脚本且 FileNameSetNext 无效，Python 侧无 DLL 调用能力，
+    层名恢复只能留待 S4 ZScript 版（ZFU DLL）。rename=True 仅用于 mock 模拟。
     前置：活动子工具 = 干净网格（导入即录制，录制起点须为零网格）。
     流程：清空现有图层 -> 切最高 SDiv -> 按 layerIndex 升序逐层录制导入
     （New -> Import -> MoveUp×k 到顶 -> W-25 退录制 -> 可见性 -> 置0）
@@ -378,10 +406,17 @@ def import_layers(zbc, out_dir, subtool_name=None):
             log("IMP", f"[FAIL] 缺失 {goz}（idx={r['idx']}）")
             fails += 1
             continue
-        ok2, err = layer_build_snapshot(zbc, goz, len(built_recs), bool(r["visible"]))
+        ok2, err = layer_build_snapshot(zbc, goz, len(built_recs), bool(r["visible"]), r["name"] if rename else None)
         if not ok2:
             log("IMP", f"[FAIL] 建层 idx={r['idx']} 失败: {err}")
             fails += 1
+            if err == "tool_replaced":
+                # 2026-08-03 实测：录制导入时 goz 顶点数与当前网格不一致 -> Tool:Import 替换当前工具
+                # （丢图层、丢细分）。继续建层会在被替换的网格上录制，delta 污染为 X−LayerC 型。
+                # 必须中止；用户需重新导入 LayerBase.goz 后重试，且导入前不得重建细分。
+                log("IMP", "工具已被导入替换（当前网格顶点数与 goz 不一致）——中止导入，避免后续层在错误网格上录制污染 delta。"
+                           "请重新导入 LayerBase.goz 后重试；导入前不要重建细分（goz 自带最终顶点，重建细分会使顶点数不一致）")
+                return len(built_recs), fails
             continue
         log("IMP", f"built idx={r['idx']} name={r['name']} int={r['intensity']} vis={r['visible']}")
         built_recs.append(r)
