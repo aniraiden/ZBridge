@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="pic/cover.png" alt="ZBridge" />
+</p>
+
 [中文版](#中文版) | [English](#english)
 
 ---
