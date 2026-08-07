@@ -12,11 +12,11 @@ ZBrush 跨版本工程迁移插件：让高版本 ZBrush 创建的 Tool 尽可�
 
 ## 功能
 
-- **Export For Older Version**：遍历全部 SubTool，导出 GoZ + manifest
-- **Import From Newer Version**：读取 manifest，循环导入 GoZ，恢复 Tool 状态
+- **Export**：遍历全部 SubTool，导出 GoZ + manifest
+- **Import**：读取 manifest，循环导入 GoZ，恢复 Tool 状态
 - 支持 Folder 结构重建、可见性恢复、细分级别还原、重复子工具名检查
 - 动态细分预览属性恢复（8 项）、颜色纹理重绑定
-- Sculpt Layer 快照（各层 GoZ + layers.txt 元数据）
+- Sculpt Layer 快照（各层 GoZ + layers.txt 元数据）— ⚠️ 开发中（0.8.5：层恢复/层名恢复尚未实现）
 
 ## 工程格式
 
@@ -32,9 +32,8 @@ ZBrush 跨版本工程迁移插件：让高版本 ZBrush 创建的 Tool 尽可�
 
 ## 使用
 
-1. 在 ZBrush 中打开 ZScript 面板（ZScript > Load）加载 `src/zscript/ZBridge.txt`
-2. 高版本 ZBrush 中点击 **Export For Older Version**，选择导出目录
-3. 低版本 ZBrush 中点击 **Import From Newer Version**，选择同一目录
+1. 高版本 ZBrush 中点击 **Export**，选择导出目录
+2. 低版本 ZBrush 中点击 **Import**，选择同一目录
 
 ## 目录结构
 
@@ -50,7 +49,7 @@ ZBrush 跨版本工程迁移插件：让高版本 ZBrush 创建的 Tool 尽可�
 
 ## 版本
 
-当前版本 0.8.0，详见 [doc/ZBridge.md](doc/ZBridge.md)。
+当前版本 0.8.0，详见 [doc/ZBridge.md](doc/ZBridge.md)（[英文版](doc/ZBridge_EN.md)）。
 
 ---
 
@@ -64,11 +63,11 @@ Built entirely on the official GoZ SDK; no ZTL/ZPR parsing. Mesh, UV, Polypaint,
 
 ## Features
 
-- **Export For Older Version**: iterate all SubTools, export GoZ + manifest
-- **Import From Newer Version**: read manifest, import GoZ in a loop, restore Tool state
+- **Export**: iterate all SubTools, export GoZ + manifest
+- **Import**: read manifest, import GoZ in a loop, restore Tool state
 - Folder structure reconstruction, visibility restore, subdivision level restore, duplicate subtool name check
 - Dynamic subdivision preview attribute restore (8 attrs), color texture rebind
-- Sculpt Layer snapshots (per-layer GoZ + layers.txt metadata)
+- Sculpt Layer snapshots (per-layer GoZ + layers.txt metadata) — ⚠️ in development (0.8.5: layer restore/layer rename not implemented yet)
 
 ## Project Format
 
@@ -84,9 +83,8 @@ export_dir/
 
 ## Usage
 
-1. In ZBrush, open the ZScript panel (ZScript > Load) and load `src/zscript/ZBridge.txt`
-2. Click **Export For Older Version** in the newer ZBrush, choose the export directory
-3. Click **Import From Newer Version** in the older ZBrush, choose the same directory
+1. Click **Export** in the newer ZBrush, choose the export directory
+2. Click **Import** in the older ZBrush, choose the same directory
 
 ## Directory Layout
 
@@ -102,4 +100,4 @@ export_dir/
 
 ## Version
 
-Current version 0.8.0. See [doc/ZBridge.md](doc/ZBridge.md) for details.
+Current version 0.8.0. See [doc/ZBridge.md](doc/ZBridge.md) / [English](doc/ZBridge_EN.md) for details.
