@@ -112,6 +112,7 @@ ZBridge
 | 后续规划 | 动态细分预览与属性还原（8 属性，manifest ext 字段） | ✅ 0.6.0 |
 | 后续规划 | 颜色贴图还原（贴图重新贴回，hasTexture/textureFile） | ✅ 0.7.0 |
 | 后续规划 | 雕刻图层还原 | 待实现 |
+| 后续规划 | Stager 阶段保留（Home/Target，ext stg* 键 + `<名>_StageAlt.goz`） | ✅ 0.9.0（待真机验证） |
 | 第四阶段 | Active Tool、Material、Compatibility Layer | 待实现 |
 
 > 版本策略：每个新功能发布时递增版本号（如 0.6.0、0.7.0…），保留前一版 release 存档。
@@ -125,3 +126,31 @@ ZBridge
 职责划分：**GoZ 负责几何数据，ZBridge 负责工程状态。**
 
 > 两者职责清晰，不重复保存数据，不解析 ZTL，仅通过官方 GoZ SDK 实现 ZBrush 高版本到低版本的自动恢复。
+
+## 十五、Stager 阶段保留（0.9.0）
+
+Stager（Tool > Geometry > Stager，ZBrush 2018 起）为每个子工具保存 Home Stage / Target Stage 两个摆位。GoZ 只携带当前摆位，所以由插件补全另一阶段：
+
+- **导出**：主 GoZ 导出后（仍在最高 SDiv、Dynamic 预览已关），若 Switch Stage 可用（两阶段齐全）：Switch Stage → 导出 `<名>_StageAlt.goz` → Switch Stage 切回 → 把刚导出的主 GoZ 导回（保证导出不改动场景）。ext 追加 `stg=1;stgHome=;stgTarget=;stgCur=0;stgAlt=;stgCount=;`。
+- **导入**：Phase 2 内、**Reconstruct Subdiv 之前**（此时网格与 StageAlt 顶点顺序一致，Import 只更新顶点；之后再 Import 会整体替换网格、细分与阶段一起丢失）。当前网格存为 Home → 导入 StageAlt → 存为 Target → Switch Stage 回到 Home → 恢复 Stages Count。
+- **兼容**：所有控件 `IExists` 防护；无 Stager 的低版本整体跳过；不含 stg 键的旧导出完全不受影响。
+
+### 实测（自动化脚本逐顶点最近邻比对；同版本 2022.0.5→2022.0.5 与跨版本 2025.0.1→2022.0.5 结果相同）
+
+| 检查项 | 结果 |
+|------|------|
+| 导出后源模型与导出前 | 完全一致（最大偏差 0） |
+| 导入后当前摆位 vs 原 Home | 一致（最大最近邻偏差 1e-7） |
+| 导入后 Switch 一次 vs 原 Target | 一致（1e-7） |
+| 再 Switch 回来 vs 原 Home | 一致（1e-7） |
+| 细分级别 / 显示级别 | 2 级 / 1 级，保留 |
+| 无阶段的子工具 | 不受影响 |
+
+### 控件读数（实测）与由此带来的限制
+
+- Home/Target 的 `IGet`：0=未存，1=已存；Switch Stage 仅两阶段齐全时可用。
+- **读不出当前在哪个阶段**（Switch Stage 的 `IGet` 恒为 0，`IModGet`/`IGetSecondary` 不支持）：导出时的当前摆位一律记为 Home。若导出时停在 Target，迁移后两个摆位都在、Switch 照常往返，只是 Home/Target 名称互换。
+- **Switch Stage 是相对切换**：存阶段后又移动、未再存，导出后 Home=移动后的摆位，Target=它加上原 Home→Target 偏移（与在原文件里按 Switch 的结果一致），原先存的绝对 Home 位置不保留。
+- Interpolate 生成的中间阶段不导出（导入后用 Stages Count + Interpolate 重新生成）。
+- 含雕刻图层的子工具不做阶段迁移（导出不做 Switch 往返，导入跳过并在完成提示中计数）。
+- 控件读数在 ZBrush 2025.0.1 中与 2022.0.5 相同。

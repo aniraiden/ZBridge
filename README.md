@@ -21,6 +21,7 @@ ZBrush 跨版本工程迁移插件：让高版本 ZBrush 创建的 Tool 尽可�
 - 支持 Folder 结构重建、可见性恢复、细分级别还原、重复子工具名检查
 - 动态细分预览属性恢复（8 项）、颜色纹理重绑定
 - Sculpt Layer 快照（各层 GoZ + layers.txt 元数据）— ⚠️ 开发中（0.8.5：层恢复/层名恢复尚未实现）
+- Stager 阶段保留（0.9.0）：子工具的 Home / Target 阶段随迁移重建（另一阶段导出为 `<子工具名>_StageAlt.goz`）
 
 ## 工程格式
 
@@ -72,6 +73,7 @@ Built entirely on the official GoZ SDK; no ZTL/ZPR parsing. Mesh, UV, Polypaint,
 - Folder structure reconstruction, visibility restore, subdivision level restore, duplicate subtool name check
 - Dynamic subdivision preview attribute restore (8 attrs), color texture rebind
 - Sculpt Layer snapshots (per-layer GoZ + layers.txt metadata) — ⚠️ in development (0.8.5: layer restore/layer rename not implemented yet)
+- Stager stages (0.9.0): each SubTool's Home / Target stages are rebuilt after migration (the other stage is exported as `<SubToolName>_StageAlt.goz`)
 
 ## Project Format
 
