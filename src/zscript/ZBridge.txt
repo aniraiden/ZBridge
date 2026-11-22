@@ -1212,7 +1212,7 @@
 //        ext 追加：stg=1;stgHome=h;stgTarget=t;stgCur=0;stgAlt=a;stgCount=n;
 //  导入：当前网格 = 导出时的当前摆位 C；存为 Home -> 导入 StageAlt（同拓扑，
 //        仅改顶点、保留细分）-> 存为 Target -> Switch Stage 回到 C。
-//控件判定（ZBrush 2022.0.5 实测，tests/Stager_probe.txt）：
+//控件判定（ZBrush 2022.0.5 / 2025.0.1 实测一致，tests/Stager_probe.txt）：
 //  Home/Target 指示 = IGet(Tool:Geometry:Home Stage / Target Stage)，0=未存，1=已存
 //  两阶段齐全       = IsEnabled(Tool:Geometry:Switch Stage)
 //  当前阶段         = 无法读取（Switch Stage 的 IGet 恒为 0，IModGet/IGetSecondary 不支持）

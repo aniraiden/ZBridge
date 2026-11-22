@@ -135,7 +135,7 @@ Stager（Tool > Geometry > Stager，ZBrush 2018 起）为每个子工具保存 H
 - **导入**：Phase 2 内、**Reconstruct Subdiv 之前**（此时网格与 StageAlt 顶点顺序一致，Import 只更新顶点；之后再 Import 会整体替换网格、细分与阶段一起丢失）。当前网格存为 Home → 导入 StageAlt → 存为 Target → Switch Stage 回到 Home → 恢复 Stages Count。
 - **兼容**：所有控件 `IExists` 防护；无 Stager 的低版本整体跳过；不含 stg 键的旧导出完全不受影响。
 
-### 实测（ZBrush 2022.0.5，导出→导入同版本，tests 外的自动化脚本逐顶点比对）
+### 实测（自动化脚本逐顶点最近邻比对；同版本 2022.0.5→2022.0.5 与跨版本 2025.0.1→2022.0.5 结果相同）
 
 | 检查项 | 结果 |
 |------|------|
@@ -153,4 +153,4 @@ Stager（Tool > Geometry > Stager，ZBrush 2018 起）为每个子工具保存 H
 - **Switch Stage 是相对切换**：存阶段后又移动、未再存，导出后 Home=移动后的摆位，Target=它加上原 Home→Target 偏移（与在原文件里按 Switch 的结果一致），原先存的绝对 Home 位置不保留。
 - Interpolate 生成的中间阶段不导出（导入后用 Stages Count + Interpolate 重新生成）。
 - 含雕刻图层的子工具不做阶段迁移（导出不做 Switch 往返，导入跳过并在完成提示中计数）。
-- 跨版本（如 2025 → 2022）尚未实测；控件路径相同，ZBrush 2024.4 文档截图中的按钮名称一致。
+- 控件读数在 ZBrush 2025.0.1 中与 2022.0.5 相同。
