@@ -990,7 +990,6 @@
 [MemCreateFromFile,zbLayerMem,zbLayGozPath]
 [VarSet,zbLayerImpOk,1]
 ]
-[Note,[StrMerge,"DBG-I1: impOk=",zbLayerImpOk," p=",zbLayGozPath],2]
 ]
 
 //统计当前子工具(zbStName)的记录数 -> zbLayerImpCount
@@ -1063,7 +1062,6 @@
 [RoutineDef,ZBRunLayerRestoreImport,
 [If,zbLayerImpOk == 1,
 [RoutineCall,ZBRunLayerImpMatch]
-[Note,[StrMerge,"DBG-I2: ",zbStName," cnt=",zbLayerImpCount],2]
 [If,zbLayerImpCount > 0,
 //1. 切到最高细分级别（快照均在最高SDiv导出，顶点一一对齐）
 [VarSet,zbLayerMaxS,0]
@@ -1080,7 +1078,6 @@
 [VarSet,zbLayerImpK,0]
 [Loop,zbLayerImpCount,
 [RoutineCall,ZBRunLayerImpRec]
-[Note,[StrMerge,"DBG-I3: k=",zbLayerImpK," f=",zbLayerFound],2]
 [If,zbLayerFound == 1,
 [VarSet,zbLayGozPath,[StrMerge,zbImportDir,zbStName,"_Layer",[Val,zbLayerImpK],".goz"]]
 [If,[FileExists,zbLayGozPath],
@@ -1100,7 +1097,6 @@
 [IPress,Tool:Layers:New]
 [VarSet,zbLayerDbg,zbLayerCount]
 [RoutineCall,ZBRunLayerDetect]
-[Note,[StrMerge,"DBG-I3b: k=",zbLayerImpK," before=",zbLayerDbg," after=",zbLayerCount],2]
 [If,zbLayerCount == zbLayerDbg+1,
 [VarSet,zbLayerRecBit,0]
 [If,[IsEnabled,Tool:Layers:Layer Intensity],
@@ -1110,11 +1106,9 @@
 [VarSet,zbLayerRecBit,1]
 ]
 ]
-[Note,[StrMerge,"DBG-I3d: k=",zbLayerImpK," rec=",zbLayerRecBit],2]
 [If,zbLayerRecBit == 1,
 [FileNameSetNext,zbLayGozPath]
 [IPress,Tool:Import]
-[Note,[StrMerge,"DBG-I3c: k=",zbLayerImpK," li=",[IsEnabled,Tool:Layers:Layer Intensity]],2]
 //层存活检测：Import 走替换路径会清空图层 -> 恢复计数防空列表操作
 [If,[IsEnabled,Tool:Layers:Layer Intensity],
 [VarSet,zbLayerGone,0]
@@ -1132,7 +1126,6 @@
 [VarSet,zbLayerH,[IHeight,zbLayerPath]]
 [IClick,zbLayerPath,zbLayerW-25,zbLayerH/2]
 ]
-[Note,[StrMerge,"DBG-I4: k=",zbLayerImpK," mod=",zbLayerMod],2]
 //命名（ZFU；任何环节失败降级跳过，不影响形变还原）
 [If,[StrLength,zbLayerName] > 0,
 [If,[StrLength,dllPath] > 0,
