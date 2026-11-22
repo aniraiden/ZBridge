@@ -1,12 +1,13 @@
 ﻿//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //ZBridge - ZBrush Cross-Version Tool Migration Plugin
-//Version: 0.8.0
+//Version: 0.9.0
 //Description: Export/Import Tools across different ZBrush versions via GoZ format
 //             + Folder structure reconstruction + visibility fix
 //             + duplicate subtool name check
 //             + dynamic subdivision preview attribute restore (8 attrs via ext field)
 //             + color texture rebind (hasTexture/textureFile via ext field)
 //             + sculpt layer snapshot (Tool:Layers base/layer GoZ snapshots + layers.txt)
+//             + Stager stages (Home/Target via ext stg* keys + <name>_StageAlt.goz)
 //Usage: Load via ZScript panel > Load button
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -145,6 +146,16 @@
 [VarDef,zbLayerDbg,0]
 [VarDef,zbLayerRecBit,0]
 [VarDef,zbLayerGone,0]
+//0.9.0 - Stager stages (Tool:Geometry:Stager Home/Target, ext field + <name>_StageAlt.goz)
+[VarDef,zbStgHas,0]              // 1 = Switch Stage enabled (both stages stored)
+[VarDef,zbStgHome,0]             // Home Stage indicator (IGet)
+[VarDef,zbStgTarget,0]           // Target Stage indicator (IGet)
+[VarDef,zbStgCur,0]              // current stage at export: 0 = Home, 1 = Target (IGet Switch Stage)
+[VarDef,zbStgCount,0]            // Stages Count slider value
+[VarDef,zbStgAltOk,0]            // 1 = <name>_StageAlt.goz written
+[VarDef,zbStgPath,""]            // <name>_StageAlt.goz path
+[VarDef,zbStgTotal,0]            // export/import: subtools whose stages were handled
+[VarDef,zbStgSkipped,0]          // import: subtools skipped (layered subtool, see ZBRunStgRestore)
 //~~~ZFileUtils INLINE ROUTINES (direct string ops on embedded lib)~~~
 //These are inlined from ZFileUtilsInc.txt for portability.
 //dllPath must be set before calling any of these.
@@ -190,8 +201,7 @@
 [VarSet,zbSavePath,[FileNameAsk,"GoZ(*.goz)|*.goz||","export.goz","ZBridge Export - Choose location..."]]
 [If,[StrLength,zbSavePath] <= 0,[Exit]]
 [VarSet,zbExportTempDir,[FileNameExtract,zbSavePath,1]]
-[VarSet,zbConfirmText,[StrMerge,"ZBridge Export\n\nTool: ",zbToolName,"\nSubTools: ",zbSubToolCount,"\n\nOutput Folder:\n",zbExportTempDir]]
-[NoteIButton,"Proceed"]
+[VarSet,zbConfirmText,[StrMerge,"ZBridge Export\n\nTool: ",zbToolName,"\nSubTools: ",zbSubToolCount,"\n\nOutput Folder:\n",zbExportTempDir]][NoteIButton,"Proceed"]
 [NoteIButton,"Cancel"]
 [VarSet,zbCf,[Note,zbConfirmText,,,4737096,,300]]
 [If,zbCf == 2,[Exit]]
@@ -206,6 +216,7 @@
 [VarSet,zbMeshIdx,0]
 [MemDelete,zbManMem]
 [MemCreate,zbManMem,32768]
+[VarSet,zbStgTotal,0]
 [VarSet,zbManOffset,0]
 [VarSet,zbManBytes,0]
 //0.8.0: 图层快照内存块（layers.txt 累积写入，跨子工具；仅含图层子工具时产出数据）
@@ -309,6 +320,9 @@
 [RoutineCall,ZBRunTexVerify]
 //0.7.0: 将贴图键（hasTexture/textureFile）追加进ext扩展字段
 [RoutineCall,ZBRunTexExtAppend]
+//0.9.0: Stager 阶段（此刻仍在最高SDiv且Dynamic预览已关：与主GoZ几何对齐）
+//有阶段 => 切到另一阶段导出 <name>_StageAlt.goz 再切回，并把 stg* 键追加进 ext
+[RoutineCall,ZBRunStgSnapshot]
 [VarSet,zbSdivStr,[Val,zbMaxSdiv]]
 [VarSet,zbCurSdivStr,[Val,zbCurSdiv]]
 //分步拼接避免超长StrMerge
@@ -334,17 +348,23 @@
 ]
 [MemResize,zbManMem,zbManOffset]
 [VarSet,zbManPath,[StrMerge,zbExportTempDir,"/zbridge_manifest.txt"]]
-[MemSaveToFile,zbManMem,zbManPath]
+//0.9.0: 第三参数=1 覆盖已有文件（原写法不覆盖：同一目录二次导出时 manifest 保持旧内容）
+[MemSaveToFile,zbManMem,zbManPath,1]
 [MemDelete,zbManMem]
 //0.8.0: 保存图层元数据 layers.txt（仅当本次导出含任意图层子工具）
+//0.9.0: 覆盖写入；本次无图层时删除旧 layers.txt，避免导入误用上一次导出的图层数据
+[VarSet,zbLayFilePath,[StrMerge,zbExportTempDir,"/layers.txt"]]
 [If,zbLayerOffset > 0,
 [MemResize,zbLayerMem,zbLayerOffset]
-[VarSet,zbLayFilePath,[StrMerge,zbExportTempDir,"/layers.txt"]]
-[MemSaveToFile,zbLayerMem,zbLayFilePath]
+[MemSaveToFile,zbLayerMem,zbLayFilePath,1]
+,
+[If,[FileExists,zbLayFilePath],
+[FileDelete,zbLayFilePath]
+]
 ]
 [MemDelete,zbLayerMem]
 [SubToolSelect,zbActiveST]
-[VarSet,zbNoteText,[StrMerge,"Export Complete!\n\nTool: ",zbToolName,"\nTotal entries: ",zbSubToolCount,"\nMeshes exported: ",zbMeshIdx,"\n\nFolder:\n",zbExportTempDir]]
+[VarSet,zbNoteText,[StrMerge,"Export Complete!\n\nTool: ",zbToolName,"\nTotal entries: ",zbSubToolCount,"\nMeshes exported: ",zbMeshIdx,"\nSubTools with Stager stages: ",zbStgTotal,"\n\nFolder:\n",zbExportTempDir]]
 [NoteIButton,"Close"]
 [Note,zbNoteText,,,4737096,,400]
 ]
@@ -1184,6 +1204,173 @@
 ]
 ]
 
+//~~~STAGER STAGES (0.9.0)~~~
+//Tool:Geometry:Stager 为每个子工具保存 Home Stage / Target Stage 两个世界空间摆位，
+//GoZ 只带当前摆位，另一阶段会丢失。做法与图层快照同思路（GoZ 负责几何，插件负责状态）：
+//  导出：读取 Home/Target 指示；两阶段都存在时（Switch Stage 可用）
+//        Switch Stage -> 导出 <name>_StageAlt.goz -> Switch Stage 切回 -> 回写主 GoZ。
+//        ext 追加：stg=1;stgHome=h;stgTarget=t;stgCur=0;stgAlt=a;stgCount=n;
+//  导入：当前网格 = 导出时的当前摆位 C；存为 Home -> 导入 StageAlt（同拓扑，
+//        仅改顶点、保留细分）-> 存为 Target -> Switch Stage 回到 C。
+//控件判定（ZBrush 2022.0.5 实测，tests/Stager_probe.txt）：
+//  Home/Target 指示 = IGet(Tool:Geometry:Home Stage / Target Stage)，0=未存，1=已存
+//  两阶段齐全       = IsEnabled(Tool:Geometry:Switch Stage)
+//  当前阶段         = 无法读取（Switch Stage 的 IGet 恒为 0，IModGet/IGetSecondary 不支持）
+//                     => 一律把导出时的当前摆位记为 Home（stgCur=0）。导出时若停在 Target，
+//                     迁移后两个摆位都在、Switch 照常往返，只是 Home/Target 名称互换。
+//全部路径 IExists 防护：2018 之前无 Stager 的版本整体跳过，ext 中的 stg* 键被忽略。
+//限制：Interpolate 生成的中间阶段不单独导出（导入后可用 Stages Count + Interpolate 重新生成）；
+//      含雕刻图层并改用 _LayerBase 导入的子工具跳过阶段重建（几何基准不同），计入 zbStgSkipped。
+
+//导出侧：调用时机 = 主 GoZ 导出之后、manifest 行写入之前（最高SDiv、Dynamic 预览已关）
+[RoutineDef,ZBRunStgSnapshot,
+[VarSet,zbStgHas,0]
+[VarSet,zbStgHome,0]
+[VarSet,zbStgTarget,0]
+[VarSet,zbStgCur,0]
+[VarSet,zbStgCount,0]
+[VarSet,zbStgAltOk,0]
+[If,[IExists,Tool:Geometry:Home Stage],
+[If,[IGet,Tool:Geometry:Home Stage] != 0,
+[VarSet,zbStgHome,1]
+]
+]
+[If,[IExists,Tool:Geometry:Target Stage],
+[If,[IGet,Tool:Geometry:Target Stage] != 0,
+[VarSet,zbStgTarget,1]
+]
+]
+[If,[IExists,Tool:Geometry:Stages Count],
+[VarSet,zbStgCount,[IGet,Tool:Geometry:Stages Count]]
+]
+//含雕刻图层的子工具不做 Switch 往返（导入侧本就跳过；往返后回写主网格的 Import 可能清空图层）
+[RoutineCall,ZBRunLayerDetect]
+[If,[IExists,Tool:Geometry:Switch Stage],
+[If,[IsEnabled,Tool:Geometry:Switch Stage],
+[VarSet,zbStgHas,1]
+[If,zbLayerCount == 0,
+//切到另一阶段 -> 导出快照 -> 切回（同拓扑，仅顶点位置不同）
+[VarSet,zbStgPath,[StrMerge,zbExportTempDir,"/",zbStName,"_StageAlt.goz"]]
+[If,[FileExists,zbStgPath],
+[FileDelete,zbStgPath]
+]
+[IPress,Tool:Geometry:Switch Stage]
+[FileNameSetNext,zbStgPath]
+[IPress,Tool:Export]
+[IPress,Tool:Geometry:Switch Stage]
+[If,[FileExists,zbStgPath],
+[VarSet,zbStgAltOk,1]
+]
+//实测：Switch Stage 总是落到已存阶段，存阶段后又移动、未再存的摆位会丢；
+//把刚导出的主 GoZ（导出前的当前网格）导回去，保证导出不改动用户场景
+[If,[FileExists,zbGozPath],
+[FileNameSetNext,zbGozPath]
+[IPress,Tool:Import]
+]
+]
+]
+]
+//任一阶段存在才写键（无 Stager 的子工具 ext 不变，旧版导入完全无感）
+[If,(zbStgHas + zbStgHome + zbStgTarget) > 0,
+[VarSet,zbExtStr,[StrMerge,zbExtStr,"stg=1;stgHome=",[Val,zbStgHome],";stgTarget=",[Val,zbStgTarget],";"]]
+[VarSet,zbExtStr,[StrMerge,zbExtStr,"stgCur=",[Val,zbStgCur],";stgAlt=",[Val,zbStgAltOk],";stgCount=",[Val,zbStgCount],";"]]
+[VarInc,zbStgTotal]
+]
+]
+
+//导入侧：Phase 2 内、Reconstruct Subdiv 之前调用（网格仍是主 GoZ 的最高级网格，无细分级别）
+//依赖调用方先解析好 zbStName / zbExtStr
+[RoutineDef,ZBRunStgRestore,
+[VarSet,zbExtKey,"stg="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,
+[If,[IExists,Tool:Geometry:Home Stage],
+//读取导出时的阶段状态
+[VarSet,zbStgHome,0]
+[VarSet,zbExtKey,"stgHome="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,[VarSet,zbStgHome,[Val,zbExtVal]]]
+[VarSet,zbStgTarget,0]
+[VarSet,zbExtKey,"stgTarget="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,[VarSet,zbStgTarget,[Val,zbExtVal]]]
+[VarSet,zbStgCur,0]
+[VarSet,zbExtKey,"stgCur="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,[VarSet,zbStgCur,[Val,zbExtVal]]]
+[VarSet,zbStgAltOk,0]
+[VarSet,zbExtKey,"stgAlt="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,[VarSet,zbStgAltOk,[Val,zbExtVal]]]
+[VarSet,zbStgCount,0]
+[VarSet,zbExtKey,"stgCount="]
+[RoutineCall,ZBRunExtParse]
+[If,zbExtFound == 1,[VarSet,zbStgCount,[Val,zbExtVal]]]
+//含图层且主网格来自 _LayerBase 的子工具：几何基准不同，跳过
+[VarSet,zbLayerBaseUsed,0]
+[If,zbLayerImpOk == 1,
+[RoutineCall,ZBRunLayerImpMatch]
+[If,zbLayerImpCount > 0,
+[If,[FileExists,[StrMerge,zbImportDir,zbStName,"_LayerBase.goz"]],
+[VarSet,zbLayerBaseUsed,1]
+]
+]
+]
+[If,zbLayerBaseUsed == 1,
+[VarInc,zbStgSkipped]
+,
+[VarSet,zbStgPath,[StrMerge,zbImportDir,zbStName,"_StageAlt.goz"]]
+[If,zbStgAltOk == 1,
+[If,[FileExists,zbStgPath],
+//1. 当前网格 = 导出时的当前阶段 C -> 存为对应阶段
+[If,zbStgCur == 0,
+[IPress,Tool:Geometry:Home Stage]
+,
+[IPress,Tool:Geometry:Target Stage]
+]
+//2. 导入另一阶段快照（同拓扑：只更新顶点位置，保留细分历史）
+[FileNameSetNext,zbStgPath]
+[IPress,Tool:Import]
+//导入会把子工具名改成 goz 名 -> 改回 manifest 名（ZFU 不可用时仅残留后缀）
+[If,[StrLength,dllPath] > 0,
+[RoutineCall,ZFU_RenameCurrentSubTool,zbStName]
+]
+//3. 存为另一阶段 -> 切回 C
+[If,zbStgCur == 0,
+[IPress,Tool:Geometry:Target Stage]
+,
+[IPress,Tool:Geometry:Home Stage]
+]
+[If,[IExists,Tool:Geometry:Switch Stage],
+[If,[IsEnabled,Tool:Geometry:Switch Stage],
+[IPress,Tool:Geometry:Switch Stage]
+]
+]
+[VarInc,zbStgTotal]
+,
+[VarInc,zbImportErrors]
+]
+,
+//只存了单个阶段：该阶段即当前摆位，直接存回
+[If,zbStgHome == 1,
+[IPress,Tool:Geometry:Home Stage]
+]
+[If,zbStgTarget == 1,
+[IPress,Tool:Geometry:Target Stage]
+]
+[VarInc,zbStgTotal]
+]
+//Stages Count（Interpolate 中间阶段数）
+[If,zbStgCount > 0,
+[If,[IExists,Tool:Geometry:Stages Count],
+[ISet,Tool:Geometry:Stages Count,zbStgCount]
+]
+]
+]
+]
+]
+]
+
 //~~~MANIFEST PARSE ROUTINE (shared by import phases)~~~
 //Parses all 9 pipe positions from zbManLine into global zbPipePos1-9
 //Format: colorize|maxSdiv|curSdiv|subtoolEye|folderEye|isFolder|isOpened|folderName|name|ext
@@ -1319,6 +1506,8 @@
 [VarSet,zbIdx,0]
 //0.7.10: 重置贴图导入标志（ZBRunTexRestore 内置 1，循环结束统一清理面板用）
 [VarSet,zbTexImported,0]
+[VarSet,zbStgTotal,0]
+[VarSet,zbStgSkipped,0]
 [Loop,zbGozCount,
 [SubToolSelect,zbIdx]
 [VarSet,zbManLine,""]
@@ -1341,6 +1530,15 @@
 ,
 [ISet,Tool:Polypaint:Colorize,0]
 ]
+]
+//0.9.0: Stager 阶段重建——必须在 Reconstruct Subdiv 之前（ZBrush 2022.0.5 实测）：
+//此刻网格 = 主 GoZ 的最高级网格，顶点顺序与 _StageAlt.goz 一致，Import 只更新顶点；
+//Reconstruct 之后顶点重排，Import 会整体替换网格（细分级别与阶段一起丢失）。
+//ZBRunStgRestore 需要 zbStName / zbExtStr，此处先行解析（Phase 2 后段会再解析一次，结果相同）
+[If,zbPipePos9 >= 0,
+[VarSet,zbStName,[StrExtract,zbManLine,zbPipePos8+1,zbPipePos9-1]]
+[VarSet,zbExtStr,[StrExtract,zbManLine,zbPipePos9+1,[StrLength,zbManLine]-1]]
+[RoutineCall,ZBRunStgRestore]
 ]
 //Restore SubDiv
 [If,zbSdivFlag == 0,
@@ -1550,6 +1748,14 @@
 [MemDelete,zbManMem]
 [MemDelete,zbLayerMem]
 [VarSet,zbNoteText,[StrMerge,"Import Complete!\n\nEntries processed: ",zbGozCount,"\nErrors: ",zbImportErrors]]
+[VarSet,zbNoteText,[StrMerge,zbNoteText,"\nStager stages restored: ",zbStgTotal]]
+[If,zbStgSkipped > 0,
+[VarSet,zbNoteText,[StrMerge,zbNoteText,"\nStager skipped (SubTools with sculpt layers): ",zbStgSkipped]]
+]
+[If,[IExists,Tool:Geometry:Home Stage],
+,
+[VarSet,zbNoteText,[StrMerge,zbNoteText,"\n(This ZBrush has no Stager - stage data ignored)"]]
+]
 [NoteIButton,"Close"]
 [Note,zbNoteText,,,4737096,,300]
 ]
@@ -1572,7 +1778,7 @@
 [IButton,"ZPlugin:ZBridge:About ZBridge",
     "ZBridge - Cross-Version Tool Migration Plugin",
     [RoutineCall,ZBGetSysInfo]
-    [VarSet,zbNoteText,[StrMerge,"ZBridge v0.8.0\n+ Cross-Version Tool Migration\nSubtool, Subdivision, Dynamic, Folder, Visibility, Texture, Layers\nZBrush Version: ",ZVers,"\nPlatform: ",zbPlatformStr,"\nAuthor: Aniraiden"]]
+    [VarSet,zbNoteText,[StrMerge,"ZBridge v0.9.0\n+ Cross-Version Tool Migration\nSubtool, Subdivision, Dynamic, Folder, Visibility, Texture, Layers, Stager\nZBrush Version: ",ZVers,"\nPlatform: ",zbPlatformStr,"\nAuthor: Aniraiden"]]
     [NoteIButton,"Close"]
     [Note,zbNoteText,,,4737096,,320]
 ,,0.8]

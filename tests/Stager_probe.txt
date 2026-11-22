@@ -1,0 +1,33 @@
+﻿﻿//Stager_probe - 读取 Tool:Geometry:Stager 控件状态（ZBridge 0.9.0 用）
+//用法：ZScript > Load 本文件 -> ZPlugin > Stager Probe > Probe，显示当前子工具的读数
+//ZBrush 2022.0.5 实测结论（ZBridge 0.9.0 依此实现）：
+//  Home Stage / Target Stage : IGet 0=未存，1=已存；IsEnabled 恒为 1
+//  Switch Stage              : 仅两个阶段都已存时 IsEnabled=1；IGet 恒为 0（读不出当前在哪个阶段）
+//  Interpolate               : 与 Switch Stage 同步启用
+//  IModGet / IGetSecondary 对这些控件不可用（会弹 ZScript 错误）
+//  Switch Stage 是相对切换：从存阶段后又移动过的位置切换，会把 Home->Target 的偏移叠加到当前位置
+//若新版本 ZBrush 读数与上述不同，把 Probe 结果发给开发者，只需改 ZBRunStgSnapshot 的判定。
+
+[VarDef,pbTxt,""]
+
+[RoutineDef,PbItem,
+[If,[IExists,pbPath],
+[VarSet,pbTxt,[StrMerge,pbTxt,pbPath,"\n  enabled=",[IsEnabled,pbPath]," get=",[IGet,pbPath],"\n"]]
+,
+[VarSet,pbTxt,[StrMerge,pbTxt,pbPath,"\n  (not found)\n"]]
+]
+,pbPath]
+
+[ISubPalette,"ZPlugin:Stager Probe"]
+
+[IButton,"ZPlugin:Stager Probe:Probe",
+"Print Stager control states for the active SubTool",
+[VarSet,pbTxt,[StrMerge,"SubTool: ",[IGetTitle,Tool:Item Info],"\nZBrush: ",[ZBrushInfo,0],"\n\n"]]
+[RoutineCall,PbItem,"Tool:Geometry:Home Stage"]
+[RoutineCall,PbItem,"Tool:Geometry:Target Stage"]
+[RoutineCall,PbItem,"Tool:Geometry:Switch Stage"]
+[RoutineCall,PbItem,"Tool:Geometry:Interpolate"]
+[RoutineCall,PbItem,"Tool:Geometry:Stages Count"]
+[NoteIButton,"Close"]
+[Note,pbTxt,,,4737096,,420]
+,,1]
